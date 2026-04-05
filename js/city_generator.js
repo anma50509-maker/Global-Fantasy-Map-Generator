@@ -641,10 +641,10 @@ class CityGenerator {
     // 7. 渲染 (支持多种调试视图)
     renderFinal() {
         let viewMode = document.querySelector('input[name="cityViewMode"]:checked').value;
-        const imgData = this.ctx.createImageData(this.width, this.width);
+        const imgData = this.ctx.createImageData(this.width, this.height); // 修复初始化方形的 Bug
         const data = imgData.data;
 
-        for(let y = ; y < this.height; y++) {
+        for(let y = 0; y < this.height; y++) {
             for (let x = 0; x < this.width; x++) {
                 let i = y * this.width + x;
                 let idx = i * 4;
@@ -750,11 +750,22 @@ class CityGenerator {
             }
         }
         
-        this.ctx.putImageData(imgData, 0, 0);
+        // 创建离屏 Canvas 来做平滑抗锯齿处理
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = this.width;
+        tempCanvas.height = this.height;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.putImageData(imgData, 0, 0);
 
-        // 不再绘制独立的方块（避免麻子感），而是利用现有的分区作为大块建筑底色
-        // 或者说，目前的分区色块（浅粉/浅黄）在视觉上就已经扮演了高德地图中那种“建成区/小区”的底色作用。
-        // 为了更贴近高德的干净效果，不添加碎块。
+        // 绘制回主画布，同时叠加抗锯齿模糊以减轻“像素风”
+        this.ctx.save();
+        this.ctx.clearRect(0, 0, this.width, this.height);
+        // 轻微的模糊滤镜，使像素点边缘柔和融合成一体，形成丝滑的高级感
+        if (viewMode === 'final') {
+            this.ctx.filter = 'blur(0.8px) contrast(1.1) saturate(1.1)';
+        }
+        this.ctx.drawImage(tempCanvas, 0, 0);
+        this.ctx.restore();
     }
 }
 
