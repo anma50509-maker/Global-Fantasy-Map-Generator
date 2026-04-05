@@ -1,0 +1,310 @@
+class MapGenerator {
+    constructor(width, height) {
+        this.width = width; this.height = height;
+        this.simplex = new SimplexNoise();
+        this.cells = new Array(width * height);
+        this.nations = [];
+        this.seaLevel = 0.4;
+    }
+
+    idx(x, y) { return y * this.width + x; }
+
+    // 无缝圆柱 3D 噪声：彻底修复缝合线与拉伸变形问题
+    noiseSeamless(nx, ny, baseFrequency, octaves = 5, persistence = 0.5, lacunarity = 2) {
+        let total = 0, frequency = baseFrequency, amplitude = 1, maxValue = 0;
+        let angleX = nx * Math.PI * 2; // 0 到 2PI，完美首尾相接
+        
+        for (let i = 0; i < octaves; i++) {
+            // 圆周长 = 2 * PI * R。让圆周长等于 frequency，以保证 2:1 的标准世界地图比例
+            // 这样 cx, cz 的变化率就与 cy (高度，跨度为 0.5 - -0.5 = 1.0) 的变化率完美匹配
+            let R = frequency / Math.PI; 
+            let cx = Math.cos(angleX) * R;
+            let cz = Math.sin(angleX) * R;
+            let cy = ny * frequency; 
+            
+            total += this.simplex.noise3D(cx, cy, cz) * amplitude;
+            maxValue += amplitude;
+            amplitude *= persistence;
+            frequency *= lacunarity;
+        }
+        return total / maxValue;
+    }
+
+    generate(params) {
+        this.simplex = new SimplexNoise(); 
+        let targetOceanRatio = params.seaLevel || 0.70; // 默认 70% 海洋
+        let nationCount = params.nationCount || 15;
+
+        // 1. 生成构造板块 (6 ~ 10 个随机板块)
+        let plateCount = Math.floor(Math.random() * 5) + 6; 
+        let plates = [];
+        for(let i = 0; i < plateCount; i++) {
+            plates.push({
+                x: Math.random(),
+                y: Math.random(),
+                type: Math.random() > 0.45 ? 'oceanic' : 'continental', // 偏向海洋板块
+                driftX: (Math.random() - 0.5) * 2, // 模拟漂移方向，用于碰撞计算
+                driftY: (Math.random() - 0.5) * 2
+            });
+        }
+
+        // --- 阶段 A：仅计算所有网格的相对地质高度 ---
+        let eArray = new Float32Array(this.width * this.height);
+        
+        for (let y = 0; y < this.height; y++) {
+            for (let x = 0; x < this.width; x++) {
+                let nx = x / this.width; // 0.0 到 1.0
+                let ny = y / this.height - 0.5; // -0.5 到 0.5
+                
+                // 域扭曲
+                let warp = 0.08;
+                let wnx = nx + (this.noiseSeamless(nx * 3, ny * 3, 3) - 0.5) * warp;
+                let wny = ny + (this.noiseSeamless(nx * 3 + 10, ny * 3 + 10, 3) - 0.5) * warp;
+                wnx = wnx % 1.0; if (wnx < 0) wnx += 1.0;
+
+                // 板块判定
+                let minDist = 999, secMinDist = 999;
+                let closestPlate = null, secondPlate = null;
+                for (let p of plates) {
+                    let dx = Math.abs(wnx - p.x);
+                    if (dx > 0.5) dx = 1.0 - dx; 
+                    let dy = (wny - (p.y - 0.5)) * 0.5;
+                    let dist = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (dist < minDist) {
+                        secMinDist = minDist; secondPlate = closestPlate;
+                        minDist = dist; closestPlate = p;
+                    } else if (dist < secMinDist) {
+                        secMinDist = dist; secondPlate = p;
+                    }
+                }
+
+                let edgeDist = secMinDist - minDist; 
+                
+                // 柔和自然的基础海拔（由超低频柏林噪声主导，确保陆地连绵自然无断层）
+                let continentNoise = (this.noiseSeamless(nx * 1.5, ny * 1.5, 4) + 1) / 2;
+                let baseNoise = (this.noiseSeamless(nx * 3.5, ny * 3.5, 6) + 1) / 2;
+                let detailNoise = (this.noiseSeamless(nx * 10, ny * 10, 4) + 1) / 2;
+                let e = continentNoise * 0.5 + baseNoise * 0.35 + detailNoise * 0.15;
+
+                // 极度柔和的板块属性微调（取消生硬的台地多边形）
+                let e1 = closestPlate.type === 'continental' ? 0.1 : -0.1;
+                let e2 = secondPlate.type === 'continental' ? 0.1 : -0.1;
+                // 使用极宽的过渡带，彻底抹去多边形边缘
+                let transitionWidth = 0.4;
+                let blend = Math.min(1.0, edgeDist / transitionWidth);
+                let smoothBlend = blend * blend * (3 - 2 * blend); 
+                let weight1 = 0.5 + 0.5 * smoothBlend;
+                let weight2 = 0.5 - 0.5 * smoothBlend;
+                e += e1 * weight1 + e2 * weight2;
+
+                // 板块交界处的自然地质断裂带（时断时续的造山运动）
+                if (edgeDist < 0.1) {
+                    let collisionIntensity = 1.0 - (edgeDist / 0.1);
+                    collisionIntensity = Math.pow(collisionIntensity, 2.0); // 更加平缓地从边界向外过渡
+                    
+                    // 引入“游走切割噪声”，让山脉呈现群山连绵、时有峡谷的真实质感，而非一条死硬的实线
+                    let boundaryWander = (this.noiseSeamless(nx * 12, ny * 12, 3) + 1) / 2;
+                    
+                    if (closestPlate.type === 'continental' && secondPlate.type === 'continental') {
+                        // 陆-陆碰撞：连绵的超级山系
+                        e += collisionIntensity * boundaryWander * 0.4;
+                    } else if (closestPlate.type === 'oceanic' && secondPlate.type === 'oceanic') {
+                        // 洋-洋分离：自然的洋中脊和零星海沟
+                        e -= collisionIntensity * boundaryWander * 0.25;
+                    } else {
+                        // 陆-洋交界：断续的海岸山脉
+                        e += collisionIntensity * boundaryWander * 0.2;
+                    }
+                }
+
+                e = Math.max(0, e);
+                e = Math.pow(e, 1.1); 
+                e = Math.min(1.0, e);
+                
+                eArray[this.idx(x, y)] = e;
+            }
+        }
+        
+        // --- 阶段 B：全局排序提取 70% 阈值作为海平面 ---
+        let sortedE = new Float32Array(eArray);
+        sortedE.sort(); 
+        let seaLevelIndex = Math.floor(this.width * this.height * targetOceanRatio);
+        this.seaLevel = sortedE[seaLevelIndex];
+        
+        // --- 阶段 C：基于确定的海平面计算气候和湿度 ---
+        for (let y = 0; y < this.height; y++) {
+            for (let x = 0; x < this.width; x++) {
+                let idx = this.idx(x, y);
+                let e = eArray[idx];
+                let nx = x / this.width;
+                let ny = y / this.height - 0.5;
+                
+                // 湿度
+                let m = (this.noiseSeamless(nx * 2 + 20, ny * 2 + 20, 4) + 1) / 2;
+                
+                // 温度 (严格纬度)
+                let latitudeTemp = 1.0 - Math.pow(Math.abs(ny * 2), 1.2); 
+                let temp = latitudeTemp * 0.85 + ((this.noiseSeamless(nx * 2 + 30, ny * 2 + 30, 3) + 1)/2) * 0.15;
+                
+                // 高海拔降温
+                if (e > this.seaLevel) {
+                    // 根据陆地相对高度进行降温 (最高山峰降温极多)
+                    let landRelE = (e - this.seaLevel) / (1.0 - this.seaLevel);
+                    temp -= landRelE * 0.7; 
+                }
+                temp = Math.max(0, Math.min(1, temp));
+
+                this.cells[idx] = { x, y, e, m, temp, nation: -1, border: false };
+            }
+        }
+
+        this.assignBiomes();
+        this.generateNations(nationCount);
+    }
+
+    assignBiomes() {
+        for (let i = 0; i < this.cells.length; i++) {
+            let c = this.cells[i];
+            if (c.e < this.seaLevel) {
+                if (c.e < this.seaLevel - 0.25) c.biome = '深海';
+                else if (c.e < this.seaLevel - 0.05) c.biome = '海洋';
+                else c.biome = '浅海';
+            } else {
+                if (c.e > 0.8) c.biome = '雪地';
+                else if (c.e > 0.7) c.biome = '高山冻原';
+                else if (c.e > 0.6) c.biome = '裸岩';
+                else if (c.e > 0.5) {
+                    if (c.m > 0.6) c.biome = '针叶林';
+                    else c.biome = '灌木丛';
+                } else if (c.temp > 0.7) {
+                    if (c.m > 0.6) c.biome = '热带雨林';
+                    else if (c.m > 0.3) c.biome = '稀树草原';
+                    else c.biome = '沙漠';
+                } else if (c.temp > 0.4) {
+                    if (c.m > 0.6) c.biome = '森林';
+                    else if (c.m > 0.3) c.biome = '草地';
+                    else c.biome = '平原';
+                } else {
+                    if (c.m > 0.5) c.biome = '寒带森林';
+                    else c.biome = '冻原';
+                }
+                
+                if (c.e < this.seaLevel + 0.02 && c.temp > 0.3 && c.m < 0.8) c.biome = '沙滩';
+            }
+        }
+    }
+
+    // 基于带权 Dijkstra 算法扩张自然的地形边界
+    generateNations(count) {
+        let landCells = this.cells.filter(c => c.e >= this.seaLevel);
+        if (landCells.length === 0) return;
+
+        this.nations = [];
+        
+        // 使用多源桶列队 (Bucket Queue) 进行极速扩张
+        // 因为所有的移动代价都是比较小的正整数，我们可以把需要处理的节点放在 cost 对应的数组里。
+        let dist = new Float32Array(this.cells.length).fill(Infinity);
+        // 关键优化：使用分离的原始数组（AOS）替代对象，避免在手机上创建上百万个小对象导致内存爆炸
+        let bucketsIdx = []; 
+        let bucketsNation = []; 
+        let currentBucketIndex = 0;
+        let processedCount = 0;
+        let totalCells = this.width * this.height;
+
+        // 随机放置首都种子
+        for (let i = 0; i < count; i++) {
+            let cell = landCells[Math.floor(Math.random() * landCells.length)];
+            if (cell.nation === -1) {
+                cell.nation = i;
+                // 使用出版物标准政区图的柔和粉彩(Pastel)配色
+                let r = Math.floor(Math.random() * 80 + 175);
+                let g = Math.floor(Math.random() * 80 + 175);
+                let b = Math.floor(Math.random() * 80 + 175);
+                let colorStr = `rgb(${r},${g},${b})`;
+                this.nations.push({ id: i, color: colorStr, rgb: {r, g, b}, capital: cell });
+                
+                let idx = this.idx(cell.x, cell.y);
+                dist[idx] = 0;
+                
+                if(!bucketsIdx[0]) { bucketsIdx[0] = []; bucketsNation[0] = []; }
+                bucketsIdx[0].push(idx);
+                bucketsNation[0].push(i);
+            }
+        }
+
+        let dirs = [[0,1],[1,0],[0,-1],[-1,0]];
+        
+        while (processedCount < totalCells && currentBucketIndex < bucketsIdx.length) {
+            let bIdx = bucketsIdx[currentBucketIndex];
+            let bNat = bucketsNation[currentBucketIndex];
+            if (!bIdx || bIdx.length === 0) {
+                currentBucketIndex++;
+                continue;
+            }
+
+            let cIdx = bIdx.pop();
+            let cNation = bNat.pop();
+            
+            if (currentBucketIndex > dist[cIdx]) continue;
+
+            processedCount++;
+
+            let cx = cIdx % this.width;
+            let cy = Math.floor(cIdx / this.width);
+
+            for (let d of dirs) {
+                let nx = cx + d[0], ny = cy + d[1];
+                if (nx < 0 || nx >= this.width || ny < 0 || ny >= this.height) continue;
+                
+                let nIdx = this.idx(nx, ny);
+                let nc = this.cells[nIdx];
+                
+                let moveCost = 1;
+                if (nc.e >= this.seaLevel) {
+                    moveCost = Math.floor(1 + (nc.e - this.seaLevel) * 40); 
+                } else {
+                    moveCost = 25; 
+                }
+                
+                let newCost = currentBucketIndex + moveCost;
+                
+                if (newCost < dist[nIdx]) {
+                    dist[nIdx] = newCost;
+                    nc.nation = cNation;
+                    
+                    if(!bucketsIdx[newCost]) { bucketsIdx[newCost] = []; bucketsNation[newCost] = []; }
+                    bucketsIdx[newCost].push(nIdx);
+                    bucketsNation[newCost].push(cNation);
+                }
+            }
+        }
+
+        // 领土扩张完全结束后，统一通过相邻阵营探测来描绘干净的国界线
+        for (let y = 0; y < this.height; y++) {
+            for (let x = 0; x < this.width; x++) {
+                let idx = this.idx(x, y);
+                let c = this.cells[idx];
+                
+                // 只有陆地节点才画国界线
+                if (c.e >= this.seaLevel && c.nation !== -1) {
+                    let isBorder = false;
+                    for (let d of dirs) {
+                        let nx = x + d[0], ny = y + d[1];
+                        if (nx < 0 || nx >= this.width || ny < 0 || ny >= this.height) continue;
+                        
+                        let nc = this.cells[this.idx(nx, ny)];
+                        // 如果身边的邻居也是陆地，但是却不属于自己的国家，说明自己就是边防前线
+                        if (nc.e >= this.seaLevel && nc.nation !== -1 && nc.nation !== c.nation) {
+                            isBorder = true;
+                            break;
+                        }
+                    }
+                    c.border = isBorder;
+                } else {
+                    c.border = false; // 海洋没有边防线
+                }
+            }
+        }
+    }
+}

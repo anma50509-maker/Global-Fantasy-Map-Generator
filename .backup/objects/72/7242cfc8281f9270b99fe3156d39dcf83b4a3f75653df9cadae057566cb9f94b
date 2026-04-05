@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>架空地图生成器</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="ui">
+        <h2>架空地图生成器</h2>
+        <button id="generateBtn">生成新地图</button>
+        <div class="control">
+            <label>国家数量: <input type="number" id="nationCount" value="12" min="0" max="50"></label>
+        </div>
+        <div class="control">
+            <label>海平面: <input type="range" id="seaLevel" value="40" min="20" max="70">%</label>
+        </div>
+        <div class="control">
+            <label>显示模式: 
+                <select id="viewMode">
+                    <option value="terrain">地形混合</option>
+                    <option value="political">政治地图</option>
+                </select>
+            </label>
+        </div>
+        <div class="legend" id="legend"></div>
+    </div>
+    <div id="map-container">
+        <canvas id="mapCanvas"></canvas>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+    <script src="js/generator.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

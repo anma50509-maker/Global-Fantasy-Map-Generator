@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>架空地图生成器</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="ui">
+        <h2>架空地图生成器</h2>
+        <button id="generateBtn">生成新地图</button>
+        <button id="toggle3DBtn" style="background-color: #3498db;">进入 3D 视图</button>
+        <button id="exportBtn" style="background-color: #27ae60;">导出高清图片</button>
+        <div class="control">
+            <label>国家数量: <input type="number" id="nationCount" value="12" min="0" max="50"></label>
+        </div>
+        <div class="control">
+            <label>海洋占比: <input type="range" id="seaLevel" value="70" min="50" max="90">%</label>
+        </div>
+        <div class="control">
+            <label>显示模式: 
+                <select id="viewMode">
+                    <option value="terrain">地形混合</option>
+                    <option value="political">政治地图</option>
+                    <option value="pure_terrain">纯地形</option>
+                    <option value="contour">纯等高线</option>
+                </select>
+            </label>
+        </div>
+        <div class="control">
+            <label>显示经纬网: <input type="checkbox" id="showGrid" checked></label>
+        </div>
+        
+        <hr style="border:1px solid #555; margin: 15px 0;">
+        <h3 style="margin-top: 0; font-size: 16px;">编辑与数据</h3>
+        
+        <div class="control">
+            <label>开启画笔编辑: <input type="checkbox" id="editMode"></label>
+        </div>
+        <div id="editControls" style="display: none; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 5px; margin-bottom: 15px;">
+                        <div class="control" style="margin-bottom: 8px;">
+                            <label>工具:
+                                <select id="editTool" style="width: 100px;">
+                                    <option value="lasso">⭕ 选区重绘</option>
+                                    <option value="raise">抬高地形</option>
+                                    <option value="lower">降低地形</option>
+                                    <option value="nation">绘制领土</option>
+                                </select>
+                            </label>
+                        </div>
+                        
+                        <div id="brushControls">
+                            <div class="control" style="margin-bottom: 8px;">
+                                <label>力度/强度: <input type="range" id="brushStrength" value="0.15" min="0.01" max="1.0" step="0.01" style="width: 100px;" oninput="document.getElementById('brushStrengthVal').innerText=this.value"> <span id="brushStrengthVal" style="display:inline-block; width: 30px; text-align: right;">0.15</span></label>
+                            </div>
+                            <div class="control" id="brushSizeControl" style="margin-bottom: 8px; display:none;">
+                                <label>笔刷大小: <input type="range" id="brushSize" value="10" min="1" max="50" style="width: 100px;" oninput="document.getElementById('brushSizeVal').innerText=this.value"> <span id="brushSizeVal" style="display:inline-block; width: 20px; text-align: right;">10</span></label>
+                            </div>
+                            <div class="control" id="nationSelectControl" style="display:none; margin-bottom: 0;">
+                                <label>国家: <select id="brushNation" style="width: 100px;"></select></label>
+                            </div>
+                        </div>
+
+                        <div id="lassoControls" style="margin-top: 10px; background: rgba(0,0,0,0.15); padding: 8px; border-radius: 5px; border: 1px dashed #555;">
+                            <div style="font-size: 12px; margin-bottom: 8px; color:#ddd;">1. 在地图上按住拖动画一个红色封闭圈。<br>2. 点击下方按钮在圈内自动生成地形：</div>
+                            <div style="display:flex; flex-wrap:wrap; gap:5px; margin-top:5px;">
+                                <button id="btnLassoRegenerate" style="width:100%; padding:8px; font-size:14px; background:#e67e22; font-weight:bold;">🔄 推倒重制选中区域</button>
+                                <button id="btnLassoClear" style="width:100%; padding:5px; font-size:12px; background:#333; margin-top:5px;">❌ 清除选区</button>
+                            </div>
+                        </div>
+
+                        <div style="font-size:12px; color:#aaa; margin-top:8px; line-height: 1.4;">提示：2D视图下才可编辑。</div>
+                    </div>
+
+        <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+            <button id="importDataBtn" style="background-color: #d35400; padding: 10px; font-size: 14px; margin-bottom: 0;">导入配置</button>
+            <button id="exportDataBtn" style="background-color: #8e44ad; padding: 10px; font-size: 14px; margin-bottom: 0;">导出配置</button>
+            <input type="file" id="importFileInput" accept=".json" style="display: none;">
+        </div>
+        <div class="legend" id="legend"></div>
+    </div>
+    <div id="map-container">
+        <canvas id="mapCanvas"></canvas>
+    </div>
+
+    <!-- 导出图片时长按保存的模态框 -->
+    <div id="exportModal">
+        <div class="modal-content">
+            <span id="closeModal">关闭预览返回</span>
+            <p style="margin: 15px 0; font-size: 16px; font-weight: bold; color: #2ecc71;">↓ 请长按下方图片，选择“保存图片”或“下载” ↓</p>
+            <img id="exportedImg" src="" alt="High Res Map">
+        </div>
+    </div>
+
+    <!-- 3D 地球渲染引擎 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+    <script src="js/generator.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

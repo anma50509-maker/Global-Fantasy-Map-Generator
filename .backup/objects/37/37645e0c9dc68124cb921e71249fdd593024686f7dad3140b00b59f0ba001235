@@ -1,0 +1,199 @@
+class MapGenerator {
+    constructor(width, height) {
+        this.width = width; this.height = height;
+        this.simplex = new SimplexNoise();
+        this.cells = new Array(width * height);
+        this.nations = [];
+        this.seaLevel = 0.4;
+    }
+
+    idx(x, y) { return y * this.width + x; }
+
+    noise(nx, ny, octaves = 4, persistence = 0.5, lacunarity = 2) {
+        let total = 0, frequency = 1, amplitude = 1, maxValue = 0;
+        for (let i = 0; i < octaves; i++) {
+            total += this.simplex.noise2D(nx * frequency, ny * frequency) * amplitude;
+            maxValue += amplitude;
+            amplitude *= persistence;
+            frequency *= lacunarity;
+        }
+        return total / maxValue;
+    }
+
+    generate(params) {
+        this.simplex = new SimplexNoise(); 
+        this.seaLevel = params.seaLevel || 0.4;
+        let nationCount = params.nationCount || 15;
+
+        // 1. 地形、温度、湿度生成
+        for (let y = 0; y < this.height; y++) {
+            for (let x = 0; x < this.width; x++) {
+                let nx = x / this.width - 0.5;
+                let ny = y / this.height - 0.5;
+                
+                // 基础海拔
+                let e = (this.noise(nx * 3, ny * 3, 6) + 1) / 2;
+                
+                // 岛屿化：距离中心的渐变，使边缘必定为海
+                let d = Math.sqrt(nx * nx + ny * ny) * 2; 
+                let falloff = Math.max(0, 1 - Math.pow(d, 2.0));
+                e = e * falloff;
+
+                // 湿度
+                let m = (this.noise(nx * 4 + 10, ny * 4 + 10, 4) + 1) / 2;
+                
+                // 温度 (赤道热，两极冷，受海拔影响)
+                let temp = 1.0 - Math.abs(ny * 2);
+                temp = temp * 0.7 + ((this.noise(nx * 2 - 10, ny * 2 - 10, 3) + 1)/2) * 0.3;
+                if (e > this.seaLevel) {
+                    temp -= (e - this.seaLevel) * 0.8; // 高海拔冷
+                }
+                temp = Math.max(0, Math.min(1, temp));
+
+                this.cells[this.idx(x, y)] = { x, y, e, m, temp, nation: -1, border: false };
+            }
+        }
+
+        this.assignBiomes();
+        this.generateNations(nationCount);
+    }
+
+    assignBiomes() {
+        for (let i = 0; i < this.cells.length; i++) {
+            let c = this.cells[i];
+            if (c.e < this.seaLevel) {
+                if (c.e < this.seaLevel - 0.25) c.biome = '深海';
+                else if (c.e < this.seaLevel - 0.05) c.biome = '海洋';
+                else c.biome = '浅海';
+            } else {
+                if (c.e > 0.8) c.biome = '雪地';
+                else if (c.e > 0.7) c.biome = '高山冻原';
+                else if (c.e > 0.6) c.biome = '裸岩';
+                else if (c.e > 0.5) {
+                    if (c.m > 0.6) c.biome = '针叶林';
+                    else c.biome = '灌木丛';
+                } else if (c.temp > 0.7) {
+                    if (c.m > 0.6) c.biome = '热带雨林';
+                    else if (c.m > 0.3) c.biome = '稀树草原';
+                    else c.biome = '沙漠';
+                } else if (c.temp > 0.4) {
+                    if (c.m > 0.6) c.biome = '森林';
+                    else if (c.m > 0.3) c.biome = '草地';
+                    else c.biome = '平原';
+                } else {
+                    if (c.m > 0.5) c.biome = '寒带森林';
+                    else c.biome = '冻原';
+                }
+                
+                if (c.e < this.seaLevel + 0.02 && c.temp > 0.3 && c.m < 0.8) c.biome = '沙滩';
+            }
+        }
+    }
+
+    // 基于 Dijkstra 扩张算法生成曲折的地形国家边界
+    generateNations(count) {
+        let landCells = this.cells.filter(c => c.e >= this.seaLevel);
+        if (landCells.length === 0) return;
+
+        this.nations = [];
+        let q = [];
+        
+        // 随机放置首都作为种子
+        for (let i = 0; i < count; i++) {
+            let cell = landCells[Math.floor(Math.random() * landCells.length)];
+            if (cell.nation === -1) {
+                cell.nation = i;
+                // 生成用于像素混合的随机RGB颜色
+                let r = Math.floor(Math.random() * 200 + 55);
+                let g = Math.floor(Math.random() * 200 + 55);
+                let b = Math.floor(Math.random() * 200 + 55);
+                let colorStr = `rgb(${r},${g},${b})`;
+                this.nations.push({ id: i, color: colorStr, rgb: {r, g, b}, capital: cell });
+                q.push({ cell, cost: 0 });
+            }
+        }
+
+        let dist = new Float32Array(this.cells.length).fill(Infinity);
+        for(let n of q) dist[this.idx(n.cell.x, n.cell.y)] = 0;
+
+        // 简易优先队列
+        class MinHeap {
+            constructor() { this.data = []; }
+            push(val) { this.data.push(val); this.up(this.data.length - 1); }
+            pop() { 
+                if (this.data.length === 0) return null;
+                const top = this.data[0]; const bottom = this.data.pop();
+                if (this.data.length > 0) { this.data[0] = bottom; this.down(0); }
+                return top;
+            }
+            up(i) {
+                while (i > 0) {
+                    const p = Math.floor((i - 1) / 2);
+                    if (this.data[p].cost <= this.data[i].cost) break;
+                    [this.data[p], this.data[i]] = [this.data[i], this.data[p]];
+                    i = p;
+                }
+            }
+            down(i) {
+                const len = this.data.length;
+                while (true) {
+                    let left = 2 * i + 1, right = 2 * i + 2, min = i;
+                    if (left < len && this.data[left].cost < this.data[min].cost) min = left;
+                    if (right < len && this.data[right].cost < this.data[min].cost) min = right;
+                    if (min === i) break;
+                    [this.data[i], this.data[min]] = [this.data[min], this.data[i]];
+                    i = min;
+                }
+            }
+        }
+
+        let pq = new MinHeap();
+        q.forEach(item => pq.push(item));
+
+        let dirs = [[0,1],[1,0],[0,-1],[-1,0]];
+        
+        while (true) {
+            let curr = pq.pop();
+            if (!curr) break;
+
+            let c = curr.cell;
+            if (dist[this.idx(c.x, c.y)] < curr.cost) continue;
+
+            for (let d of dirs) {
+                let nx = c.x + d[0], ny = c.y + d[1];
+                if (nx < 0 || nx >= this.width || ny < 0 || ny >= this.height) continue;
+                
+                let nc = this.cells[this.idx(nx, ny)];
+                
+                // 运动成本：
+                // 如果是陆地，山地极难扩张，平原容易
+                // 如果是海洋，赋予高昂的跨海成本，但允许强国跨海吞并无主岛屿
+                let moveCost = 1;
+                if (nc.e >= this.seaLevel) {
+                    moveCost = 1 + Math.pow((nc.e - this.seaLevel) * 15, 2); 
+                } else {
+                    // 水域扩张成本
+                    moveCost = 50 + Math.pow((this.seaLevel - nc.e) * 30, 2);
+                }
+                
+                let newCost = curr.cost + moveCost;
+                let nIdx = this.idx(nx, ny);
+                
+                if (newCost < dist[nIdx]) {
+                    dist[nIdx] = newCost;
+                    // 如果跨越到了新的陆地，它也就属于该国家；海水本身我们不染色
+                    if (nc.e >= this.seaLevel) {
+                        nc.nation = c.nation;
+                    }
+                    // 虽然海水不显色，但为了算法能跨海携带国家信息，需要给水下的格子做一个临时标记
+                    // 因为我们只要领土交界处的边境线，所以在海水里的格子如果属于不同阵营不绘制border
+                    pq.push({ cell: { ...nc, nation: c.nation }, cost: newCost });
+                } else if (nc.e >= this.seaLevel && nc.nation !== -1 && nc.nation !== c.nation) {
+                    // 仅在陆地上画国界线
+                    nc.border = true;
+                    c.border = true;
+                }
+            }
+        }
+    }
+}

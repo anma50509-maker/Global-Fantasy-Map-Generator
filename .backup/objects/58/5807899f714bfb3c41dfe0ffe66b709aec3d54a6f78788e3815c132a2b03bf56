@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>架空地图生成器</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="ui">
+        <h2>架空地图生成器</h2>
+        <button id="generateBtn">生成新地图</button>
+        <button id="exportBtn" style="background-color: #27ae60;">导出高清图片</button>
+        <div class="control">
+            <label>国家数量: <input type="number" id="nationCount" value="12" min="0" max="50"></label>
+        </div>
+        <div class="control">
+            <label>海平面: <input type="range" id="seaLevel" value="40" min="20" max="70">%</label>
+        </div>
+        <div class="control">
+            <label>显示模式: 
+                <select id="viewMode">
+                    <option value="terrain">地形混合</option>
+                    <option value="political">政治地图</option>
+                    <option value="pure_terrain">纯地形</option>
+                    <option value="contour">纯等高线</option>
+                </select>
+            </label>
+        </div>
+        <div class="legend" id="legend"></div>
+    </div>
+    <div id="map-container">
+        <canvas id="mapCanvas"></canvas>
+    </div>
+
+    <!-- 导出图片时长按保存的模态框 -->
+    <div id="exportModal">
+        <div class="modal-content">
+            <span id="closeModal">关闭预览返回</span>
+            <p style="margin: 15px 0; font-size: 16px; font-weight: bold; color: #2ecc71;">↓ 请长按下方图片，选择“保存图片”或“下载” ↓</p>
+            <img id="exportedImg" src="" alt="High Res Map">
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+    <script src="js/generator.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
