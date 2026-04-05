@@ -110,7 +110,7 @@ class CityGenerator {
             const ox = baseX * 100;
             const oy = baseY * 100;
 
-            for(let y = ; y < this.height; y++) {
+            for(let y = 0; y < this.height; y++) {
                 for (let x = 0; x < this.width; x++) {
                     const idx = y * this.width + x;
                     
@@ -179,7 +179,7 @@ class CityGenerator {
     // 2. 计算初始地价 P_terrain
     stepInitialLandValue() {
         return new Promise(resolve => {
-            for(let y = ; y < this.height; y++) {
+            for(let y = 0; y < this.height; y++) {
                 for (let x = 0; x < this.width; x++) {
                     const idx = y * this.width + x;
                     if (this.waterMask[idx]) {
@@ -437,7 +437,7 @@ class CityGenerator {
             
             for(let pass = 0; pass < 2; pass++) {
                 // 水平模糊
-                for(let y = ; y < this.height; y++) {
+                for(let y = 0; y < this.height; y++) {
                     for(let x = 0; x < this.width; x++) {
                         let sum = 0, count = 0;
                         for(let k = -blurRadius; k <= blurRadius; k+=3) {
@@ -452,7 +452,7 @@ class CityGenerator {
                 }
                 // 垂直模糊
                 for(let x = 0; x < this.width; x++) {
-                    for(let y = ; y < this.height; y++) {
+                    for(let y = 0; y < this.height; y++) {
                         let sum = 0, count = 0;
                         for(let k = -blurRadius; k <= blurRadius; k+=3) {
                             let ny = y + k;
@@ -497,7 +497,7 @@ class CityGenerator {
         return new Promise(resolve => {
             // 生成城市街区网格，通过内部的微型街道切分形成建筑区块，避免无规律的马赛克感
             this.geoMask = new Float32Array(this.width * this.height);
-            for(let y = ; y < this.height; y++) {
+            for(let y = 0; y < this.height; y++) {
                 for(let x = 0; x < this.width; x++) {
                     let isStreet = false;
                     
@@ -588,7 +588,7 @@ class CityGenerator {
 
             // 划分格子来放置POI，避免重叠
             const gridSize = 60;
-            for(let y = ; y < this.height; y += gridSize) {
+            for(let y = 0; y < this.height; y += gridSize) {
                 for (let x = gridSize/2; x < this.width; x += gridSize) {
                     let rx = Math.floor(x + (Math.random() * gridSize - gridSize/2));
                     let ry = Math.floor(y + (Math.random() * gridSize - gridSize/2));
