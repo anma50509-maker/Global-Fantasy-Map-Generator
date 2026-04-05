@@ -800,10 +800,10 @@ function getMousePos(canvas, evt) {
 let lastMousePos = null;
 
 function handleStart(e) {
-    if (!document.getElementById('editMode').checked || is3DMode) return;
+    if (is3DMode) return;
     lastMousePos = getMousePos(canvas, e);
     
-    let currentTool = document.getElementById('editTool').value;
+    let currentTool = document.getElementById('editTool') ? document.getElementById('editTool').value : null;
     
     // 如果是独立建城模式，则弹窗并演算，不进行绘画
     if (window.isDirectCityMode) {
@@ -831,6 +831,7 @@ function handleStart(e) {
         return;
     }
     
+    if (!document.getElementById('editMode').checked) return;
     isPainting = true;
     if (currentTool === 'lasso') {
         lassoPoints = [lastMousePos];
