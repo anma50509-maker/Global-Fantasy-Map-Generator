@@ -45,13 +45,9 @@
                                     <option value="raise">抬高地形</option>
                                     <option value="lower">降低地形</option>
                                     <option value="nation">绘制领土</option>
+                                    <option value="city">🏙️ 建立城市</option>
                                 </select>
                             </label>
-                        </div>
-                        
-                        <div style="margin-top: 15px; text-align: center;">
-                            <button id="btnDirectCity" style="width: 100%; background: #9b59b6; padding: 12px; font-weight: bold; border-radius: 5px; cursor: pointer; transition: 0.2s;">🏙️ 快速建立城市</button>
-                            <div style="font-size: 12px; color: #aaa; margin-top: 5px;">点击此按钮后，请在地图上点击目标位置</div>
                         </div>
                         
                         <div id="brushControls">
@@ -127,8 +123,6 @@
                 <label style="display:block; margin-bottom:5px;"><input type="radio" name="cityViewMode" value="terrain"> 地形潜力场</label>
                 <label style="display:block; margin-bottom:5px;"><input type="radio" name="cityViewMode" value="road"> 道路可达性</label>
                 <label style="display:block; margin-bottom:5px;"><input type="radio" name="cityViewMode" value="zone"> 分区图</label>
-                <hr style="border-color:#555; margin:15px 0;">
-                <button id="btnDownloadCity" style="width: 100%; background: #27ae60; padding: 10px; border: none; border-radius: 4px; color: white; cursor: pointer; font-weight: bold;">下载城市图片</button>
             </div>
             <!-- 城市画布容器 -->
             <div style="flex: 1; display: flex; justify-content: center; align-items: center; background: #1a1a1a; padding: 20px;">
@@ -142,7 +136,6 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
     <script src="js/generator.js"></script>
-    <script src="js/city_generator.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>

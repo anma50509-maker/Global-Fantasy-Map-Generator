@@ -1,0 +1,234 @@
+/**
+ * 城市程序化生成器
+ * 按照管线：地形 -> 初始地价 -> 道路网 -> 可达性场 -> 最终地价 -> 区域划分 -> 渲染
+ */
+
+class CityGenerator {
+    constructor(canvasId) {
+        this.canvas = document.getElementById(canvasId);
+        this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
+        
+        // 尺寸设定 (微观城市分辨率)
+        this.size = 512; 
+        this.canvas.width = this.size;
+        this.canvas.height = this.size;
+        
+        // 生成数据缓存
+        this.heightMap = new Float32Array(this.size * this.size);
+        this.waterMask = new Uint8Array(this.size * this.size);
+        this.pTerrain = new Float32Array(this.size * this.size); // 初始地价
+        this.roadNetwork = new Uint8Array(this.size * this.size); // 道路
+        this.rRoad = new Float32Array(this.size * this.size); // 道路可达性
+        this.vFinal = new Float32Array(this.size * this.size); // 最终地价
+        this.zones = new Uint8Array(this.size * this.size); // 0商业 1居住 2工业 3郊区 4水体
+        
+        // 临时参数
+        this.params = {
+            seaLevel: 0.3,
+            comZone: 0.85,
+            roadDensity: 3
+        };
+    }
+
+    // 更新参数
+    updateParams(params) {
+        Object.assign(this.params, params);
+    }
+
+    // 主生成流程
+    async generate(baseX, baseY) {
+        this.ctx.clearRect(0, 0, this.size, this.size);
+        this.ctx.fillStyle = "#333";
+        this.ctx.fillText("正在演算城市数据...", this.size/2 - 50, this.size/2);
+
+        // 避免阻塞主线程，使用 setTimeout 进行异步分割
+        await this.stepTerrain(baseX, baseY);
+        await this.stepInitialLandValue();
+        await this.stepRoads();
+        await this.stepAccessibility();
+        await this.stepFinalLandValue();
+        await this.stepZones();
+        
+        this.renderFinal();
+    }
+
+    // 1. 生成微观地形
+    stepTerrain(baseX, baseY) {
+        return new Promise(resolve => {
+            // 利用外部全局的 simplex noise，或者新建一个
+            // 提取大地图位置 (baseX, baseY) 周围的高频噪声作为城市细节
+            for (let y = 0; y < this.size; y++) {
+                for (let x = 0; x < this.size; x++) {
+                    const idx = y * this.size + x;
+                    // 缩放比例
+                    const nx = baseX + (x / this.size) * 0.05;
+                    const ny = baseY + (y / this.size) * 0.05;
+                    
+                    let e = 1 * generator.noiseSeamless(1 * nx, 1 * ny) +
+                            0.5 * generator.noiseSeamless(2 * nx, 2 * ny) +
+                            0.25 * generator.noiseSeamless(4 * nx, 4 * ny);
+                    e = e / (1 + 0.5 + 0.25);
+                    e = Math.pow(e, 1.2); // 调整起伏
+                    
+                    this.heightMap[idx] = e;
+                    this.waterMask[idx] = e < this.params.seaLevel ? 1 : 0;
+                }
+            }
+            resolve();
+        });
+    }
+
+    // 2. 计算初始地价 P_terrain
+    stepInitialLandValue() {
+        return new Promise(resolve => {
+            for (let y = 0; y < this.size; y++) {
+                for (let x = 0; x < this.size; x++) {
+                    const idx = y * this.size + x;
+                    if (this.waterMask[idx]) {
+                        this.pTerrain[idx] = 0;
+                        continue;
+                    }
+                    
+                    // 简化版：越靠近中心、越靠近水边地价越高 (暂时代替距离变换)
+                    let distToCenter = Math.sqrt(Math.pow(x - this.size/2, 2) + Math.pow(y - this.size/2, 2)) / (this.size/2);
+                    let val = 1.0 - distToCenter * 0.5; 
+                    
+                    // 加入一点地形平坦度（简化：这里直接用地形高度倒数代替坡度）
+                    val += (1.0 - this.heightMap[idx]) * 0.5;
+                    
+                    this.pTerrain[idx] = Math.max(0, Math.min(1, val));
+                }
+            }
+            resolve();
+        });
+    }
+
+    // 3. 道路生成 (Road Network)
+    stepRoads() {
+        return new Promise(resolve => {
+            this.roadNetwork.fill(0);
+            
+            // TODO: 实现 L-System 或 A* 张量场寻路
+            // 占位符：画一个十字主干道 + 一些环路
+            let cx = this.size / 2;
+            let cy = this.size / 2;
+            
+            for (let y = 0; y < this.size; y++) {
+                for (let x = 0; x < this.size; x++) {
+                    const idx = y * this.size + x;
+                    if (this.waterMask[idx]) continue;
+
+                    // 十字形主干道
+                    if (Math.abs(x - cx) < 3 || Math.abs(y - cy) < 3) {
+                        this.roadNetwork[idx] = 3; // 主干道
+                    }
+                    // 环路
+                    let dist = Math.sqrt(Math.pow(x - cx, 2) + Math.pow(y - cy, 2));
+                    if (Math.abs(dist - 100) < 2 || Math.abs(dist - 200) < 2) {
+                        this.roadNetwork[idx] = 2; // 次干道
+                    }
+                }
+            }
+            resolve();
+        });
+    }
+
+    // 4. 可达性场
+    stepAccessibility() {
+        return new Promise(resolve => {
+            // 简单的距离衰减
+            for (let idx = 0; idx < this.size * this.size; idx++) {
+                this.rRoad[idx] = this.roadNetwork[idx] > 0 ? 1.0 : 0;
+                // TODO: 添加高斯模糊扩散效果
+            }
+            resolve();
+        });
+    }
+
+    // 5. 最终地价 V_final
+    stepFinalLandValue() {
+        return new Promise(resolve => {
+            for (let idx = 0; idx < this.size * this.size; idx++) {
+                if (this.waterMask[idx]) {
+                    this.vFinal[idx] = 0;
+                    continue;
+                }
+                // V_final = P_terrain × (1 + γ·R_road)
+                let gamma = 2.0;
+                this.vFinal[idx] = this.pTerrain[idx] * (1 + gamma * this.rRoad[idx]);
+                this.vFinal[idx] = Math.min(1, this.vFinal[idx]);
+            }
+            resolve();
+        });
+    }
+
+    // 6. 区域划分 (Zoning)
+    stepZones() {
+        return new Promise(resolve => {
+            // 获取所有陆地地价并排序寻找分位数
+            let landValues = [];
+            for (let i = 0; i < this.size * this.size; i++) {
+                if (!this.waterMask[i]) landValues.push(this.vFinal[i]);
+            }
+            landValues.sort((a,b) => a-b);
+            
+            let qCom = landValues[Math.floor(landValues.length * this.params.comZone)] || 0.8;
+            let qRes = landValues[Math.floor(landValues.length * 0.5)] || 0.5;
+
+            for (let i = 0; i < this.size * this.size; i++) {
+                if (this.waterMask[i]) {
+                    this.zones[i] = 4; // 水
+                } else if (this.roadNetwork[i] > 0) {
+                    this.zones[i] = 5; // 道路不分区
+                } else {
+                    let v = this.vFinal[i];
+                    if (v >= qCom) this.zones[i] = 0; // 商业
+                    else if (v >= qRes) this.zones[i] = 1; // 居住
+                    else this.zones[i] = 3; // 郊区
+                }
+            }
+            resolve();
+        });
+    }
+
+    // 7. 渲染
+    renderFinal() {
+        const imgData = this.ctx.createImageData(this.size, this.size);
+        const data = imgData.data;
+        
+        for (let i = 0; i < this.size * this.size; i++) {
+            let idx = i * 4;
+            let z = this.zones[i];
+            
+            if (this.roadNetwork[i] > 0) {
+                // 道路
+                data[idx] = 50; data[idx+1] = 50; data[idx+2] = 50; data[idx+3] = 255;
+            } else if (z === 4) {
+                // 水
+                data[idx] = 52; data[idx+1] = 152; data[idx+2] = 219; data[idx+3] = 255;
+            } else if (z === 0) {
+                // 商业 (蓝灰色建筑群)
+                data[idx] = 142; data[idx+1] = 68; data[idx+2] = 173; data[idx+3] = 255;
+            } else if (z === 1) {
+                // 居住 (浅橙色建筑群)
+                data[idx] = 230; data[idx+1] = 126; data[idx+2] = 34; data[idx+3] = 255;
+            } else if (z === 3) {
+                // 郊区 (绿色)
+                data[idx] = 46; data[idx+1] = 204; data[idx+2] = 113; data[idx+3] = 255;
+            } else {
+                data[idx] = 0; data[idx+1] = 0; data[idx+2] = 0; data[idx+3] = 255;
+            }
+            
+            // 叠加地形明暗
+            let h = this.heightMap[i];
+            data[idx] *= (0.5 + h*0.5);
+            data[idx+1] *= (0.5 + h*0.5);
+            data[idx+2] *= (0.5 + h*0.5);
+        }
+        
+        this.ctx.putImageData(imgData, 0, 0);
+    }
+}
+
+// 实例化全局城建器
+window.cityGen = null;

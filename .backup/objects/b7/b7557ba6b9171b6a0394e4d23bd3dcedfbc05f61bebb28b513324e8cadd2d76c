@@ -45,13 +45,9 @@
                                     <option value="raise">抬高地形</option>
                                     <option value="lower">降低地形</option>
                                     <option value="nation">绘制领土</option>
+                                    <option value="city">🏙️ 建立城市</option>
                                 </select>
                             </label>
-                        </div>
-                        
-                        <div style="margin-top: 15px; text-align: center;">
-                            <button id="btnDirectCity" style="width: 100%; background: #9b59b6; padding: 12px; font-weight: bold; border-radius: 5px; cursor: pointer; transition: 0.2s;">🏙️ 快速建立城市</button>
-                            <div style="font-size: 12px; color: #aaa; margin-top: 5px;">点击此按钮后，请在地图上点击目标位置</div>
                         </div>
                         
                         <div id="brushControls">
@@ -100,49 +96,11 @@
         </div>
     </div>
 
-    <!-- 城市生成器模态框 -->
-    <div id="cityModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 1000; flex-direction: column;">
-        <div style="background: #2c3e50; padding: 15px; color: white; display: flex; justify-content: space-between; align-items: center;">
-            <h2 style="margin: 0; font-size: 20px;">🌆 局部城市视图</h2>
-            <button id="closeCityModal" style="background: #e74c3c; border: none; padding: 8px 15px; color: white; border-radius: 4px; cursor: pointer;">返回世界</button>
-        </div>
-        <div style="display: flex; flex: 1; overflow: hidden;">
-            <!-- 城市控制面板 -->
-            <div style="width: 250px; background: #34495e; padding: 15px; color: white; overflow-y: auto;">
-                <h3 style="margin-top:0;">生成参数</h3>
-                <div class="control" style="margin-bottom:10px;">
-                    <label>海平面: <input type="range" id="citySeaLevel" value="0.3" min="0" max="1" step="0.05" style="width:100%;"></label>
-                </div>
-                <div class="control" style="margin-bottom:10px;">
-                    <label>商业区占比: <input type="range" id="cityComZone" value="0.85" min="0.5" max="0.95" step="0.01" style="width:100%;"></label>
-                </div>
-                <div class="control" style="margin-bottom:10px;">
-                    <label>道路密度: <input type="range" id="cityRoadDens" value="3" min="1" max="5" step="1" style="width:100%;"></label>
-                </div>
-                <button id="btnRegenerateCity" style="width: 100%; background: #3498db; margin-top: 10px; padding: 10px;">重新演算城市</button>
-                
-                <hr style="border-color:#555; margin:15px 0;">
-                <h3 style="margin-top:0;">调试视图</h3>
-                <label style="display:block; margin-bottom:5px;"><input type="radio" name="cityViewMode" value="final" checked> 最终城市渲染</label>
-                <label style="display:block; margin-bottom:5px;"><input type="radio" name="cityViewMode" value="terrain"> 地形潜力场</label>
-                <label style="display:block; margin-bottom:5px;"><input type="radio" name="cityViewMode" value="road"> 道路可达性</label>
-                <label style="display:block; margin-bottom:5px;"><input type="radio" name="cityViewMode" value="zone"> 分区图</label>
-                <hr style="border-color:#555; margin:15px 0;">
-                <button id="btnDownloadCity" style="width: 100%; background: #27ae60; padding: 10px; border: none; border-radius: 4px; color: white; cursor: pointer; font-weight: bold;">下载城市图片</button>
-            </div>
-            <!-- 城市画布容器 -->
-            <div style="flex: 1; display: flex; justify-content: center; align-items: center; background: #1a1a1a; padding: 20px;">
-                <canvas id="cityCanvas" style="box-shadow: 0 0 20px rgba(0,0,0,0.8); max-width: 100%; max-height: 100%; background: #000;"></canvas>
-            </div>
-        </div>
-    </div>
-
     <!-- 3D 地球渲染引擎 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
     <script src="js/generator.js"></script>
-    <script src="js/city_generator.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>

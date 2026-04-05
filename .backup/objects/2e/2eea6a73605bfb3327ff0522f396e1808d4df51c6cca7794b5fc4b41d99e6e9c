@@ -559,27 +559,20 @@ window.addEventListener('DOMContentLoaded', () => {
     document.getElementById('closeCityModal').addEventListener('click', () => {
         document.getElementById('cityModal').style.display = 'none';
     });
-    
+
     document.getElementById('btnRegenerateCity').addEventListener('click', () => {
         if (!window.lastCityPos) return;
-
+        
         cityGen.updateParams({
             seaLevel: parseFloat(document.getElementById('citySeaLevel').value),
             comZone: parseFloat(document.getElementById('cityComZone').value),
             roadDensity: parseInt(document.getElementById('cityRoadDens').value)
         });
-
+        
         cityGen.generate(window.lastCityPos.x, window.lastCityPos.y);
     });
 
-    document.getElementById('btnDownloadCity').addEventListener('click', () => {
-        const cityCanvas = document.getElementById('cityCanvas');
-        const link = document.createElement('a');
-        link.download = `city_map_${Date.now()}.png`;
-        link.href = cityCanvas.toDataURL('image/png');
-        link.click();
-    });
-
+    // 绑定单选框切换渲染模式
     document.querySelectorAll('input[name="cityViewMode"]').forEach(radio => {
         radio.addEventListener('change', (e) => {
             if (!window.lastCityPos) return; // 还没生成

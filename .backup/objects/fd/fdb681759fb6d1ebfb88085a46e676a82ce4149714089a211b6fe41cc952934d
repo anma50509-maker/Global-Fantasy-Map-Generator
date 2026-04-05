@@ -558,8 +558,6 @@ window.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('closeCityModal').addEventListener('click', () => {
         document.getElementById('cityModal').style.display = 'none';
-    });
-    
     document.getElementById('btnRegenerateCity').addEventListener('click', () => {
         if (!window.lastCityPos) return;
 

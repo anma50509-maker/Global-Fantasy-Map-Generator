@@ -523,63 +523,24 @@ document.getElementById('editTool').addEventListener('change', (e) => {
 // 初始化城市生成器及模态框事件
 window.addEventListener('DOMContentLoaded', () => {
     window.cityGen = new CityGenerator('cityCanvas');
-
-    // 绑定独立建城按钮
-    document.getElementById('btnDirectCity').addEventListener('click', () => {
-        // 自动勾选“开启画笔编辑”
-        let editCheckbox = document.getElementById('editMode');
-        if (!editCheckbox.checked) {
-            editCheckbox.click();
-        }
-        
-        // 由于我们将 editTool 的 city 删除了，我们用一个全局状态标识进入独立建城模式
-        window.isDirectCityMode = true;
-        
-        // 变色提示
-        const btn = document.getElementById('btnDirectCity');
-        const oldText = '🏙️ 快速建立城市';
-        btn.style.background = '#e74c3c';
-        btn.innerText = '请在地图上点击...';
-        
-        // 鼠标变十字
-        document.getElementById('mapCanvas').style.cursor = 'crosshair';
-        
-        // 5秒后自动重置状态
-        if (window.cityTimeout) clearTimeout(window.cityTimeout);
-        window.cityTimeout = setTimeout(() => {
-            if (window.isDirectCityMode) {
-                btn.style.background = '#9b59b6';
-                btn.innerText = oldText;
-                window.isDirectCityMode = false;
-                document.getElementById('mapCanvas').style.cursor = 'default';
-            }
-        }, 5000);
-    });
-
+    
     document.getElementById('closeCityModal').addEventListener('click', () => {
         document.getElementById('cityModal').style.display = 'none';
     });
-    
+
     document.getElementById('btnRegenerateCity').addEventListener('click', () => {
         if (!window.lastCityPos) return;
-
+        
         cityGen.updateParams({
             seaLevel: parseFloat(document.getElementById('citySeaLevel').value),
             comZone: parseFloat(document.getElementById('cityComZone').value),
             roadDensity: parseInt(document.getElementById('cityRoadDens').value)
         });
-
+        
         cityGen.generate(window.lastCityPos.x, window.lastCityPos.y);
     });
 
-    document.getElementById('btnDownloadCity').addEventListener('click', () => {
-        const cityCanvas = document.getElementById('cityCanvas');
-        const link = document.createElement('a');
-        link.download = `city_map_${Date.now()}.png`;
-        link.href = cityCanvas.toDataURL('image/png');
-        link.click();
-    });
-
+    // 绑定单选框切换渲染模式
     document.querySelectorAll('input[name="cityViewMode"]').forEach(radio => {
         radio.addEventListener('change', (e) => {
             if (!window.lastCityPos) return; // 还没生成
@@ -805,17 +766,9 @@ function handleStart(e) {
     
     let currentTool = document.getElementById('editTool').value;
     
-    // 如果是独立建城模式，则弹窗并演算，不进行绘画
-    if (window.isDirectCityMode) {
+    // 如果是建城模式，则弹窗并演算，不进行绘画
+    if (currentTool === 'city') {
         isPainting = false;
-        window.isDirectCityMode = false; // 消费掉这次点击
-        
-        // 恢复按钮状态
-        const btn = document.getElementById('btnDirectCity');
-        btn.style.background = '#9b59b6';
-        btn.innerText = '🏙️ 快速建立城市';
-        document.getElementById('mapCanvas').style.cursor = 'default';
-        
         document.getElementById('cityModal').style.display = 'flex';
         // 记录点击在大地图上的百分比坐标，传给城市生成器作为局部高频采样的基准
         window.lastCityPos = {
@@ -824,10 +777,8 @@ function handleStart(e) {
         };
         // 读取主地图海平面初始值
         document.getElementById('citySeaLevel').value = generator.seaLevel;
-        // 修复部分设备可能出现的渲染卡顿，稍微延时执行渲染
-        setTimeout(() => {
-            document.getElementById('btnRegenerateCity').click();
-        }, 100);
+        // 开始演算
+        document.getElementById('btnRegenerateCity').click();
         return;
     }
     
@@ -844,14 +795,13 @@ let paintTicking = false;
 let lastPaintEvent = null;
 
 function handleMove(e) {
-    let currentTool = document.getElementById('editTool').value;
-    if (isPainting && currentTool !== 'city') {
+    if (isPainting) {
         lastPaintEvent = e;
         if (!paintTicking) {
             requestAnimationFrame(() => {
                 if (lastPaintEvent) {
                     let currentPos = getMousePos(canvas, lastPaintEvent);
-                    if (currentTool === 'lasso') {
+                    if (document.getElementById('editTool').value === 'lasso') {
                         lassoPoints.push(currentPos);
                         drawLassoOverlay();
                     } else {
