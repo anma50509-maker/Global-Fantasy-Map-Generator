@@ -8,19 +8,21 @@ class CityGenerator {
         this.canvas = document.getElementById(canvasId);
         this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
         
-        // 尺寸设定 (微观城市分辨率)
-        this.size = 512; 
-        this.canvas.width = this.size;
-        this.canvas.height = this.size;
+        // 尺寸设定 (长方形高清分辨率)
+        this.width = 1024;
+        this.height = 640;
+        this.canvas.width = this.width;
+        this.canvas.height = this.height;
+        let totalCells = this.width * this.height;
         
         // 生成数据缓存
-        this.heightMap = new Float32Array(this.size * this.size);
-        this.waterMask = new Uint8Array(this.size * this.size);
-        this.pTerrain = new Float32Array(this.size * this.size); // 初始地价
-        this.roadNetwork = new Uint8Array(this.size * this.size); // 道路
-        this.rRoad = new Float32Array(this.size * this.size); // 道路可达性
-        this.vFinal = new Float32Array(this.size * this.size); // 最终地价
-        this.zones = new Uint8Array(this.size * this.size); // 0商业 1居住 2工业 3郊区 4水体
+        this.heightMap = new Float32Array(totalCells);
+        this.waterMask = new Uint8Array(totalCells);
+        this.pTerrain = new Float32Array(totalCells); // 初始地价
+        this.roadNetwork = new Uint8Array(totalCells); // 道路
+        this.rRoad = new Float32Array(totalCells); // 道路可达性
+        this.vFinal = new Float32Array(totalCells); // 最终地价
+        this.zones = new Uint8Array(totalCells); // 0商业 1居住 2工业 3郊区 4水体
         
         // 临时参数
         this.params = {
@@ -37,9 +39,9 @@ class CityGenerator {
 
     // 主生成流程
     async generate(baseX, baseY) {
-        this.ctx.clearRect(0, 0, this.size, this.size);
+        this.ctx.clearRect(0, 0, this.width, this.width);
         this.ctx.fillStyle = "#333";
-        this.ctx.fillText("正在演算城市数据...", this.size/2 - 50, this.size/2);
+        this.ctx.fillText("正在演算城市数据...", this.width/2 - 50, this.width/2);
 
         // 初始化 POI 列表
         this.pois = [];
@@ -108,13 +110,13 @@ class CityGenerator {
             const ox = baseX * 100;
             const oy = baseY * 100;
 
-            for (let y = 0; y < this.size; y++) {
-                for (let x = 0; x < this.size; x++) {
-                    const idx = y * this.size + x;
+            for(let y = ; y < this.height; y++) {
+                for (let x = 0; x < this.width; x++) {
+                    const idx = y * this.width + x;
                     
                     // 城市内部的缩放坐标
-                    let nx = ox + (x / this.size) * 2.5;
-                    let ny = oy + (y / this.size) * 2.5;
+                    let nx = ox + (x / this.width) * 2.5;
+                    let ny = oy + (y / this.width) * 2.5;
                     
                     // 1. 基础大平原：略高于海平面，非常平坦适合建城
                     let e = this.params.seaLevel + 0.02; 
@@ -164,11 +166,11 @@ class CityGenerator {
 
     // --- 工具函数：获取地形梯度 (用于道路避障与等高线跟随) ---
     getGradient(x, y) {
-        if (x <= 0 || x >= this.size - 1 || y <= 0 || y >= this.size - 1) return {dx: 0, dy: 0, mag: 0};
-        let h_left = this.heightMap[y * this.size + x - 1];
-        let h_right = this.heightMap[y * this.size + x + 1];
-        let h_up = this.heightMap[(y - 1) * this.size + x];
-        let h_down = this.heightMap[(y + 1) * this.size + x];
+        if (x <= 0 || x >= this.width - 1 || y <= 0 || y >= this.height - 1) return {dx: 0, dy: 0, mag: 0};
+        let h_left = this.heightMap[y * this.width + x - 1];
+        let h_right = this.heightMap[y * this.width + x + 1];
+        let h_up = this.heightMap[(y - 1) * this.width + x];
+        let h_down = this.heightMap[(y + 1) * this.width + x];
         let dx = (h_right - h_left) * 0.5;
         let dy = (h_down - h_up) * 0.5;
         return {dx: dx, dy: dy, mag: Math.sqrt(dx*dx + dy*dy)};
@@ -177,16 +179,16 @@ class CityGenerator {
     // 2. 计算初始地价 P_terrain
     stepInitialLandValue() {
         return new Promise(resolve => {
-            for (let y = 0; y < this.size; y++) {
-                for (let x = 0; x < this.size; x++) {
-                    const idx = y * this.size + x;
+            for(let y = ; y < this.height; y++) {
+                for (let x = 0; x < this.width; x++) {
+                    const idx = y * this.width + x;
                     if (this.waterMask[idx]) {
                         this.pTerrain[idx] = 0;
                         continue;
                     }
                     
                     // 简化版：越靠近中心、越靠近水边地价越高 (暂时代替距离变换)
-                    let distToCenter = Math.sqrt(Math.pow(x - this.size/2, 2) + Math.pow(y - this.size/2, 2)) / (this.size/2);
+                    let distToCenter = Math.sqrt(Math.pow(x - this.width/2, 2) + Math.pow(y - this.height/2, 2)) / (this.width/2);
                     let val = 1.0 - distToCenter * 0.5; 
                     
                     // 加入一点地形平坦度（简化：这里直接用地形高度倒数代替坡度）
@@ -210,8 +212,8 @@ class CityGenerator {
             for(let wy = -width; wy <= width; wy++){
                 for(let wx = -width; wx <= width; wx++){
                     let px = x0 + wx, py = y0 + wy;
-                    if (px >= 0 && px < this.size && py >= 0 && py < this.size) {
-                        let idx = py * this.size + px;
+                    if (px >= 0 && px < this.width && py >= 0 && py < this.height) {
+                        let idx = py * this.width + px;
                         // 移除水域限制，允许把路画在水上（作为桥梁）
                         this.roadNetwork[idx] = Math.max(this.roadNetwork[idx], type);
                     }
@@ -238,10 +240,10 @@ class CityGenerator {
             let px = Math.floor(cx);
             let py = Math.floor(cy);
             
-            if (px < 5 || px >= this.size-5 || py < 5 || py >= this.size-5) {
+            if (px < 5 || px >= this.width-5 || py < 5 || py >= this.height-5) {
                 hit = true; break;
             }
-            let idx = py * this.size + px;
+            let idx = py * this.width + px;
             
             if (this.waterMask[idx]) {
                 // 如果是主干道(type > 1)，尝试跨越水域建桥！
@@ -251,8 +253,8 @@ class CityGenerator {
                     for (let f = 1; f <= 50; f++) {
                         let fx = Math.floor(cx + dx * f);
                         let fy = Math.floor(cy + dy * f);
-                        if (fx < 5 || fx >= this.size-5 || fy < 5 || fy >= this.size-5) break;
-                        if (!this.waterMask[fy * this.size + fx]) {
+                        if (fx < 5 || fx >= this.width-5 || fy < 5 || fy >= this.height-5) break;
+                        if (!this.waterMask[fy * this.width + fx]) {
                             foundLand = true;
                             step += f; // 直接跳跃到对岸
                             cx = x0 + dx * step;
@@ -290,13 +292,13 @@ class CityGenerator {
             // 1. 寻找几个城市主次中心作为吸引点
             let centers = [];
             for(let i=0; i<4; i++) {
-                let rx = 50 + Math.random()*(this.size-100);
-                let ry = 50 + Math.random()*(this.size-100);
-                if (!this.waterMask[Math.floor(ry)*this.size+Math.floor(rx)]) {
+                let rx = 50 + Math.random()*(this.width-100);
+                let ry = 50 + Math.random()*(this.width-100);
+                if (!this.waterMask[Math.floor(ry)*this.width+Math.floor(rx)]) {
                     centers.push({x: rx, y: ry});
                 }
             }
-            if(centers.length === 0) centers.push({x: this.size/2, y: this.size/2});
+            if(centers.length === 0) centers.push({x: this.width/2, y: this.width/2});
             let mainCenter = centers[0];
 
             let branches = [];
@@ -422,7 +424,7 @@ class CityGenerator {
     stepAccessibility() {
         return new Promise(resolve => {
             // 初始化权重
-            for (let i = 0; i < this.size * this.size; i++) {
+            for (let i = 0; i < this.width * this.height; i++) {
                 if (this.roadNetwork[i] === 3) this.rRoad[i] = 1.0;
                 else if (this.roadNetwork[i] === 2) this.rRoad[i] = 0.6;
                 else if (this.roadNetwork[i] === 1) this.rRoad[i] = 0.3;
@@ -431,35 +433,35 @@ class CityGenerator {
 
             // 执行两次快速 Box Blur 以逼近高斯辐射，模拟道路带动周边地价
             let blurRadius = 15;
-            let temp = new Float32Array(this.size * this.size);
+            let temp = new Float32Array(this.width * this.height);
             
             for(let pass = 0; pass < 2; pass++) {
                 // 水平模糊
-                for(let y = 0; y < this.size; y++) {
-                    for(let x = 0; x < this.size; x++) {
+                for(let y = ; y < this.height; y++) {
+                    for(let x = 0; x < this.width; x++) {
                         let sum = 0, count = 0;
                         for(let k = -blurRadius; k <= blurRadius; k+=3) {
                             let nx = x + k;
-                            if(nx >= 0 && nx < this.size) {
-                                sum += this.rRoad[y * this.size + nx];
+                            if(nx >= 0 && nx < this.width) {
+                                sum += this.rRoad[y * this.width + nx];
                                 count++;
                             }
                         }
-                        temp[y * this.size + x] = sum / count;
+                        temp[y * this.width + x] = sum / count;
                     }
                 }
                 // 垂直模糊
-                for(let x = 0; x < this.size; x++) {
-                    for(let y = 0; y < this.size; y++) {
+                for(let x = 0; x < this.width; x++) {
+                    for(let y = ; y < this.height; y++) {
                         let sum = 0, count = 0;
                         for(let k = -blurRadius; k <= blurRadius; k+=3) {
                             let ny = y + k;
-                            if(ny >= 0 && ny < this.size) {
-                                sum += temp[ny * this.size + x];
+                            if(ny >= 0 && ny < this.height) {
+                                sum += temp[ny * this.width + x];
                                 count++;
                             }
                         }
-                        this.rRoad[y * this.size + x] = sum / count;
+                        this.rRoad[y * this.width + x] = sum / count;
                     }
                 }
             }
@@ -476,7 +478,7 @@ class CityGenerator {
     // 5. 最终地价 V_final
     stepFinalLandValue() {
         return new Promise(resolve => {
-            for (let idx = 0; idx < this.size * this.size; idx++) {
+            for (let idx = 0; idx < this.width * this.height; idx++) {
                 if (this.waterMask[idx]) {
                     this.vFinal[idx] = 0;
                     continue;
@@ -494,9 +496,9 @@ class CityGenerator {
     async stepZones() {
         return new Promise(resolve => {
             // 生成城市街区网格，通过内部的微型街道切分形成建筑区块，避免无规律的马赛克感
-            this.geoMask = new Float32Array(this.size * this.size);
-            for(let y = 0; y < this.size; y++) {
-                for(let x = 0; x < this.size; x++) {
+            this.geoMask = new Float32Array(this.width * this.height);
+            for(let y = ; y < this.height; y++) {
+                for(let x = 0; x < this.width; x++) {
                     let isStreet = false;
                     
                     // 1. 动态对齐道路的街区网格
@@ -526,22 +528,22 @@ class CityGenerator {
                     if (isStreet) {
                         // 有些大区块（如大型综合体）会覆盖次级小街，让它连成一大块
                         if ((x % 12 < 1 || y % 12 < 1) && blockHash > 0.6) {
-                            this.geoMask[y * this.size + x] = 1.0; // 封死小街，连成大块
+                            this.geoMask[y * this.width + x] = 1.0; // 封死小街，连成大块
                         } else {
-                            this.geoMask[y * this.size + x] = 0.0; // 正常的街道线条镂空
+                            this.geoMask[y * this.width + x] = 0.0; // 正常的街道线条镂空
                         }
                     } else if (blockHash < 0.15) {
                         // 15%的大区块整体作为空出来的广场或绿地
-                        this.geoMask[y * this.size + x] = 0.0;
+                        this.geoMask[y * this.width + x] = 0.0;
                     } else {
-                        this.geoMask[y * this.size + x] = 1.0; // 实心的方形建筑区
+                        this.geoMask[y * this.width + x] = 1.0; // 实心的方形建筑区
                     }
                 }
             }
 
             // 获取所有陆地地价并排序寻找分位数
             let landValues = [];
-            for (let i = 0; i < this.size * this.size; i++) {
+            for (let i = 0; i < this.width * this.height; i++) {
                 if (!this.waterMask[i]) landValues.push(this.vFinal[i]);
             }
             landValues.sort((a,b) => a-b);
@@ -549,7 +551,7 @@ class CityGenerator {
             this.qCom = landValues[Math.floor(landValues.length * this.params.comZone)] || 0.8;
             this.qRes = landValues[Math.floor(landValues.length * 0.5)] || 0.5;
             
-            for (let i = 0; i < this.size * this.size; i++) {
+            for (let i = 0; i < this.width * this.height; i++) {
                 if (this.waterMask[i]) {
                     this.zones[i] = 4; // 水
                 } else if (this.roadNetwork[i] > 0) {
@@ -586,14 +588,14 @@ class CityGenerator {
 
             // 划分格子来放置POI，避免重叠
             const gridSize = 60;
-            for (let y = gridSize/2; y < this.size; y += gridSize) {
-                for (let x = gridSize/2; x < this.size; x += gridSize) {
+            for(let y = ; y < this.height; y += gridSize) {
+                for (let x = gridSize/2; x < this.width; x += gridSize) {
                     let rx = Math.floor(x + (Math.random() * gridSize - gridSize/2));
                     let ry = Math.floor(y + (Math.random() * gridSize - gridSize/2));
                     
-                    if (rx < 0 || rx >= this.size || ry < 0 || ry >= this.size) continue;
+                    if (rx < 0 || rx >= this.width || ry < 0 || ry >= this.height) continue;
                     
-                    let idx = ry * this.size + rx;
+                    let idx = ry * this.width + rx;
                     let vFinal = this.vFinal[idx];
                     let isWater = this.waterMask[idx];
                     let z = this.zones[idx];
@@ -639,12 +641,12 @@ class CityGenerator {
     // 7. 渲染 (支持多种调试视图)
     renderFinal() {
         let viewMode = document.querySelector('input[name="cityViewMode"]:checked').value;
-        const imgData = this.ctx.createImageData(this.size, this.size);
+        const imgData = this.ctx.createImageData(this.width, this.width);
         const data = imgData.data;
 
-        for (let y = 0; y < this.size; y++) {
-            for (let x = 0; x < this.size; x++) {
-                let i = y * this.size + x;
+        for(let y = ; y < this.height; y++) {
+            for (let x = 0; x < this.width; x++) {
+                let i = y * this.width + x;
                 let idx = i * 4;
                 let r=0, g=0, b=0;
 
