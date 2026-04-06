@@ -367,9 +367,7 @@ function draw() {
 
     // --- 更新 3D 地球贴图并直接将结果复制回主 Canvas ---
     if (typeof globe !== 'undefined' && globe) {
-        let tex = new THREE.CanvasTexture(textureCanvas);
-        tex.colorSpace = THREE.SRGBColorSpace;
-        globe.material.map = tex;
+        globe.material.map = new THREE.CanvasTexture(textureCanvas);
         globe.material.needsUpdate = true;
     }
     
@@ -691,10 +689,8 @@ document.getElementById('toggle3DBtn').addEventListener('click', () => {
         } else {
             // 当用户在 2D 下修改了模式（比如换成了政区图）后再切回 3D
             // 需要强制更新材质的纹理贴图
-            let tex = new THREE.CanvasTexture(textureCanvas);
-            tex.colorSpace = THREE.SRGBColorSpace;
-            globe.material.map = tex;
-            globe.material.needsUpdate = true;
+            globe.material.map = new THREE.CanvasTexture(textureCanvas);
+            globe.material.map.needsUpdate = true;
             renderer.domElement.style.display = 'block';
         }
         
