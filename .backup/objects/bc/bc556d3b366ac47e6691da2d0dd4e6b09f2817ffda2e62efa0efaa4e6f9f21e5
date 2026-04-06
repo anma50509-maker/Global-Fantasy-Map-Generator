@@ -705,8 +705,6 @@ document.getElementById('toggle3DBtn').addEventListener('click', () => {
             // 需要强制更新材质的纹理贴图
             let tex = new THREE.CanvasTexture(textureCanvas);
             tex.colorSpace = THREE.SRGBColorSpace;
-            tex.wrapS = THREE.RepeatWrapping;
-            tex.repeat.x = -1;
             globe.material.map = tex;
             globe.material.needsUpdate = true;
             renderer.domElement.style.display = 'block';
