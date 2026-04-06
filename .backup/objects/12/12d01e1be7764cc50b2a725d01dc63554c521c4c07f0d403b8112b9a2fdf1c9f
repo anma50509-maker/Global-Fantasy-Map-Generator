@@ -369,7 +369,7 @@ document.getElementById('generateBtn').addEventListener('click', () => {
     }, 50);
 });
 
-document.getElementById('viewMode').addEventListener('change', () => { draw(); updateLegend(); });
+document.getElementById('viewMode').addEventListener('change', draw);
 document.getElementById('showGrid').addEventListener('change', draw);
 
 // 绑定导出高清图片逻辑 (兼容移动端的长按保存)

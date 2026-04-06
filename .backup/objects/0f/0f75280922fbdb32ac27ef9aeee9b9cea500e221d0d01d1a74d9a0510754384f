@@ -369,7 +369,7 @@ document.getElementById('generateBtn').addEventListener('click', () => {
     }, 50);
 });
 
-document.getElementById('viewMode').addEventListener('change', () => { draw(); updateLegend(); });
+document.getElementById('viewMode').addEventListener('change', draw);
 document.getElementById('showGrid').addEventListener('change', draw);
 
 // 绑定导出高清图片逻辑 (兼容移动端的长按保存)
@@ -507,12 +507,10 @@ function init3D() {
     const displacementTexture = new THREE.CanvasTexture(heightCanvas);
 
     // 法线/位移贴图
-    const material = new THREE.MeshStandardMaterial({
+    const material = new THREE.MeshStandardMaterial({ 
         map: texture,
-        bumpMap: displacementTexture, // 使用高度图作为凹凸贴图实现光影细节，比纯 displacement 更平滑
-        bumpScale: 0.03, // 凹凸感强度
         displacementMap: displacementTexture,
-        displacementScale: 0.02, // 仅仅保留微弱的真实位移，避免阶梯状
+        displacementScale: 0.08, // 控制地球山脉拔地而起的真实高度比例
         roughness: 0.8,        // 地表较为粗糙
         metalness: 0.1         // 避免塑料感
     });
