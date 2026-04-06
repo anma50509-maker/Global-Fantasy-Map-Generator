@@ -963,12 +963,6 @@ function executeLassoAction(actionType) {
         }
     });
 
-    // 领土被批量拉升/下沉编辑后，清除国家名称的渲染缓存以重新计算文字排版和字号
-    if (generator && generator.nations) {
-        generator.nations.forEach(n => n.renderData = null);
-    }
-    updateNationSelect();
-
     lassoPoints = [];
     draw();
 }

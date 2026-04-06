@@ -719,12 +719,11 @@ function updateNationSelect() {
     const brushNation = document.getElementById('brushNation');
     if (!brushNation) return;
     brushNation.innerHTML = '<option value="-1">移除领土 (变成无主地)</option>';
-        if(generator.nations) {
-            generator.nations.forEach(n => {
-                let displayName = n.name ? `${n.name} [${n.id}]` : `国家 ${n.id}`;
-                brushNation.innerHTML += `<option value="${n.id}">${displayName} (${n.color})</option>`;
-            });
-        }
+    if(generator.nations) {
+        generator.nations.forEach(n => {
+            brushNation.innerHTML += `<option value="${n.id}">国家 ${n.id} (${n.color})</option>`;
+        });
+    }
 }
 
 document.getElementById('editMode').addEventListener('change', (e) => {
@@ -963,12 +962,6 @@ function executeLassoAction(actionType) {
         }
     });
 
-    // 领土被批量拉升/下沉编辑后，清除国家名称的渲染缓存以重新计算文字排版和字号
-    if (generator && generator.nations) {
-        generator.nations.forEach(n => n.renderData = null);
-    }
-    updateNationSelect();
-
     lassoPoints = [];
     draw();
 }
@@ -1149,16 +1142,9 @@ function drawLassoOverlay() {
 function handleEnd() {
     if (isPainting) {
         isPainting = false;
-        
-        // 领土被编辑后，清除国家名称的渲染缓存以重新计算文字排版和字号
-        if (generator && generator.nations) {
-            generator.nations.forEach(n => n.renderData = null);
-        }
-        updateNationSelect();
-        
         // 如果是画笔模式，抬起时才全局更新恢复河流。如果是圈选模式，保留红色线框
         if (document.getElementById('editTool').value !== 'lasso') {
-            draw();
+            draw(); 
         } else {
             drawLassoOverlay();
         }

@@ -719,12 +719,11 @@ function updateNationSelect() {
     const brushNation = document.getElementById('brushNation');
     if (!brushNation) return;
     brushNation.innerHTML = '<option value="-1">移除领土 (变成无主地)</option>';
-        if(generator.nations) {
-            generator.nations.forEach(n => {
-                let displayName = n.name ? `${n.name} [${n.id}]` : `国家 ${n.id}`;
-                brushNation.innerHTML += `<option value="${n.id}">${displayName} (${n.color})</option>`;
-            });
-        }
+    if(generator.nations) {
+        generator.nations.forEach(n => {
+            brushNation.innerHTML += `<option value="${n.id}">国家 ${n.id} (${n.color})</option>`;
+        });
+    }
 }
 
 document.getElementById('editMode').addEventListener('change', (e) => {
@@ -963,12 +962,6 @@ function executeLassoAction(actionType) {
         }
     });
 
-    // 领土被批量拉升/下沉编辑后，清除国家名称的渲染缓存以重新计算文字排版和字号
-    if (generator && generator.nations) {
-        generator.nations.forEach(n => n.renderData = null);
-    }
-    updateNationSelect();
-
     lassoPoints = [];
     draw();
 }
@@ -1069,28 +1062,8 @@ function handleStart(e) {
         }, 100);
         return;
     }
-
-    if (!document.getElementById('editMode').checked) {
-        // 如果未开启画笔模式（普通浏览模式），点击领土时弹出修改国家名称窗口
-        let idx = generator.idx(lastMousePos.x, lastMousePos.y);
-        let cell = generator.cells[idx];
-        if (cell && cell.nation !== -1 && cell.e >= generator.seaLevel && !cell.isLake) {
-            let nation = generator.nations[cell.nation];
-            let currentName = nation.name || `国家 ${nation.id}`;
-            let newName = prompt(`编辑国家名称 (当前: ${currentName})：`, currentName);
-            if (newName !== null) {
-                // 如果用户没有输入内容，或只输入空格，则保留原名字，否则更新
-                let trimmed = newName.trim();
-                nation.name = trimmed !== "" ? trimmed : undefined;
-                // 清除之前的渲染数据缓存以触发重新计算中心和角度
-                nation.renderData = null;
-                // 强制重绘来更新文字
-                draw();
-            }
-        }
-        return;
-    }
-
+    
+    if (!document.getElementById('editMode').checked) return;
     isPainting = true;
     if (currentTool === 'lasso') {
         lassoPoints = [lastMousePos];
@@ -1149,16 +1122,9 @@ function drawLassoOverlay() {
 function handleEnd() {
     if (isPainting) {
         isPainting = false;
-        
-        // 领土被编辑后，清除国家名称的渲染缓存以重新计算文字排版和字号
-        if (generator && generator.nations) {
-            generator.nations.forEach(n => n.renderData = null);
-        }
-        updateNationSelect();
-        
         // 如果是画笔模式，抬起时才全局更新恢复河流。如果是圈选模式，保留红色线框
         if (document.getElementById('editTool').value !== 'lasso') {
-            draw();
+            draw(); 
         } else {
             drawLassoOverlay();
         }
