@@ -492,25 +492,28 @@ function init3D() {
     const texture = new THREE.CanvasTexture(textureCanvas);
     texture.anisotropy = renderer.capabilities.getMaxAnisotropy(); // 提高纹理清晰度
     
-    // 我们专门构建一张 32位浮点高度贴图来作为 bumpMap 和 displacementMap（位移贴图），避免8位 Canvas 导致的横纹和阶梯感
-    let floatData = new Float32Array(width * height * 4);
+    // 我们专门构建一张灰度的高度贴图来作为 displacementMap（位移贴图），避免用彩色地形图做 bumpMap 导致等高线一样的诡异波纹
+    let eImgData = tCtx.createImageData(width, height);
     for (let i = 0; i < generator.cells.length; i++) {
         let e = Math.max(0, Math.min(1.0, generator.cells[i].e));
-        floatData[i*4] = e;
-        floatData[i*4+1] = e;
-        floatData[i*4+2] = e;
-        floatData[i*4+3] = 1.0;
+        let val = Math.floor(e * 255);
+        eImgData.data[i*4] = val;
+        eImgData.data[i*4+1] = val;
+        eImgData.data[i*4+2] = val;
+        eImgData.data[i*4+3] = 255;
     }
-    const displacementTexture = new THREE.DataTexture(floatData, width, height, THREE.RGBAFormat, THREE.FloatType);
-    displacementTexture.needsUpdate = true;
+    const heightCanvas = document.createElement('canvas');
+    heightCanvas.width = width; heightCanvas.height = height;
+    heightCanvas.getContext('2d').putImageData(eImgData, 0, 0);
+    const displacementTexture = new THREE.CanvasTexture(heightCanvas);
 
     // 法线/位移贴图
-    const material = new THREE.MeshStandardMaterial({ 
+    const material = new THREE.MeshStandardMaterial({
         map: texture,
-        bumpMap: displacementTexture, // 使用平滑的浮点高度图作为凹凸贴图
-        bumpScale: 0.02, // 凹凸感强度
+        bumpMap: displacementTexture, // 使用高度图作为凹凸贴图实现光影细节，比纯 displacement 更平滑
+        bumpScale: 0.03, // 凹凸感强度
         displacementMap: displacementTexture,
-        displacementScale: 0.04, // 真实的地形拔起高度
+        displacementScale: 0.02, // 仅仅保留微弱的真实位移，避免阶梯状
         roughness: 0.8,        // 地表较为粗糙
         metalness: 0.1         // 避免塑料感
     });
