@@ -583,8 +583,13 @@ window.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('input[name="cityViewMode"]').forEach(radio => {
         radio.addEventListener('change', (e) => {
             if (!window.lastCityPos) return; // 还没生成
-            let mode = e.target.value;
-            // TODO: 在 cityGen 中实现视图切换，目前全按 renderFinal 处理
+            cityGen.renderFinal();
+        });
+    });
+    
+    document.querySelectorAll('input[name="cityStyleMode"]').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            if (!window.lastCityPos) return; // 还没生成
             cityGen.renderFinal();
         });
     });

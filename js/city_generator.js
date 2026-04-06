@@ -718,47 +718,62 @@ class CityGenerator {
                     else if (z === 1) { r=241; g=196; b=15; }
                     else if (z === 3) { r=46; g=204; b=113; }
                 } else {
-                    // 最终渲染 - 现代电子地图风格 (高德/Google Map风格)
+                    // 最终渲染 - 多风格切换
+                    let styleMode = document.querySelector('input[name="cityStyleMode"]:checked');
+                    styleMode = styleMode ? styleMode.value : 'dark_blueprint';
+                    
                     let h = this.heightMap[i];
                     let isWater = this.waterMask[i];
                     let z = this.zones[i];
                     
-                    if (this.roadNetwork[i] > 0) {
-                        // 道路渲染：根据图1，全是纯白色线，并且为了跟镂空网格匹配，稍微加亮
-                        r=255; g=255; b=255;
-                    } else if (isWater) {
-                        // 水体：使用深蓝色或者与底色相近的暗色（参考图1）
-                        r=45; g=45; b=60;
-                    } else if (z === 4 && this.geoMask && this.geoMask[i] === 0.0 && this.vFinal[i] >= this.qRes) {
-                        // 这是被我们用“微型街道”镂空出来的建筑区内部空隙
-                        // 渲染成类似细小街道或广场底色的颜色，这里使用稍微比底色浅一点点的深灰色，形成线框感
-                        r=75; g=75; b=95;
-                    } else {
-                        // 底色：参考图1的深蓝灰色/紫灰色底调
-                        let baseR = 65, baseG = 65, baseB = 85;
-                        
-                        // 叠加城市化信息：参考图1那种大块的浅紫色/灰白色几何块
-                        if (z === 0) {
-                            // 商业区：较亮的灰白色
-                            r = 220; g = 220; b = 235;
-                        } else if (z === 1) {
-                            // 居住区：浅紫灰色
-                            r = 160; g = 160; b = 185;
-                        } else if (z === 3) {
-                            // 郊区(低密度)：深一点的紫灰色过渡
-                            r = 100; g = 100; b = 125;
-                        } else {
-                            // 未开发自然区
-                            r = baseR;
-                            g = baseG;
-                            b = baseB;
+                    // 获取建筑网格内部镂空标志
+                    let isGridGap = (z === 4 && this.geoMask && this.geoMask[i] === 0.0 && this.vFinal[i] >= this.qRes);
+                    
+                    if (styleMode === 'dark_blueprint') {
+                        // 1. 赛博暗色蓝图 (图3风格)
+                        if (this.roadNetwork[i] > 0) { r=255; g=255; b=255; }
+                        else if (isWater) { r=45; g=45; b=60; }
+                        else if (isGridGap) { r=75; g=75; b=95; }
+                        else {
+                            let baseR = 65, baseG = 65, baseB = 85;
+                            if (z === 0) { r = 220; g = 220; b = 235; }
+                            else if (z === 1) { r = 160; g = 160; b = 185; }
+                            else if (z === 3) { r = 100; g = 100; b = 125; }
+                            else { r = baseR; g = baseG; b = baseB; }
+                            
+                            let shadeFactor = 1.0 + shade * 0.15;
+                            r *= shadeFactor; g *= shadeFactor; b *= shadeFactor;
                         }
-                        
-                        // 极其轻微的光照阴影效果，保持扁平感，只有极其细微的起伏
-                        let shadeFactor = 1.0 + shade * 0.15;
-                        r *= shadeFactor;
-                        g *= shadeFactor;
-                        b *= shadeFactor;
+                    } else if (styleMode === 'classic_nav') {
+                        // 2. 经典浅色导航图 (图2高德/Google风格)
+                        if (this.roadNetwork[i] > 0) { r=255; g=255; b=255; }
+                        else if (isWater) { r=160; g=200; b=255; } // 浅蓝色水体
+                        else if (isGridGap) { r=230; g=235; b=240; } // 浅灰色街道底色
+                        else {
+                            let baseR = 210, baseG = 235, baseB = 210; // 浅绿色自然底色
+                            if (z === 0) { r = 255; g = 210; b = 210; } // 商业区浅红色
+                            else if (z === 1) { r = 250; g = 240; b = 220; } // 居住区浅黄色
+                            else if (z === 3) { r = 225; g = 240; b = 220; } // 郊区过渡色
+                            else { r = baseR; g = baseG; b = baseB; }
+                            
+                            let shadeFactor = 1.0 + shade * 0.1; // 极弱的阴影
+                            r *= shadeFactor; g *= shadeFactor; b *= shadeFactor;
+                        }
+                    } else if (styleMode === 'retro_paper') {
+                        // 3. 复古规划纸图 (图1复古风格)
+                        if (this.roadNetwork[i] > 0) { r=60; g=60; b=60; } // 黑色道路
+                        else if (isWater) { r=173; g=216; b=230; } // 灰蓝色水体
+                        else if (isGridGap) { r=240; g=230; b=215; } // 纸张本色街道
+                        else {
+                            let baseR = 245, baseG = 240, baseB = 225; // 发黄的图纸底色
+                            if (z === 0) { r = 230; g = 170; b = 180; } // 复古红商业区
+                            else if (z === 1) { r = 210; g = 200; b = 220; } // 复古紫居住区
+                            else if (z === 3) { r = 220; g = 220; b = 200; } // 复古绿郊区
+                            else { r = baseR; g = baseG; b = baseB; }
+                            
+                            let shadeFactor = 1.0 + shade * 0.2; // 稍微强一点的铅笔阴影质感
+                            r *= shadeFactor; g *= shadeFactor; b *= shadeFactor;
+                        }
                     }
                 }
 
