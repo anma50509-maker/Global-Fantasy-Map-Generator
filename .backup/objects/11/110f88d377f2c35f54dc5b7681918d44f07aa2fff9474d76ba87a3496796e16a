@@ -115,26 +115,24 @@ function draw() {
 
             // 等高线和地形光照
             if (viewMode === 'contour') {
-                // 等高线模式：绘制等高线条纹
-                if (cx > 0 && cy > 0) {
+                // 等高线模式：关闭阴影，绘制等高线条纹
+                if (cx > 0 && cy > 0 && c.e >= generator.seaLevel) {
+                    let landE = (c.e - generator.seaLevel) / (1.0 - generator.seaLevel);
                     let leftE = generator.cells[i - 1].e;
                     let topE = generator.cells[i - width].e;
-                    let landE = (c.e - generator.seaLevel) / (1.0 - generator.seaLevel);
                     let leftLandE = (leftE - generator.seaLevel) / (1.0 - generator.seaLevel);
                     let topLandE = (topE - generator.seaLevel) / (1.0 - generator.seaLevel);
                     
                     // 判断是否有海拔等级的跨越，绘制深色线条
-                    if (c.e >= generator.seaLevel && leftE >= generator.seaLevel && topE >= generator.seaLevel) {
-                        for (let tc of terrainColors) {
-                            if ((landE <= tc.limit && leftLandE > tc.limit) || (landE <= tc.limit && topLandE > tc.limit) ||
-                                (landE > tc.limit && leftLandE <= tc.limit) || (landE > tc.limit && topLandE <= tc.limit)) {
-                                r = 100; g = 100; b = 100; // 等高线颜色
-                                break;
-                            }
+                    for (let tc of terrainColors) {
+                        if ((landE <= tc.limit && leftLandE > tc.limit) || (landE <= tc.limit && topLandE > tc.limit) ||
+                            (landE > tc.limit && leftLandE <= tc.limit) || (landE > tc.limit && topLandE <= tc.limit)) {
+                            r = 100; g = 100; b = 100; // 等高线颜色
+                            break;
                         }
                     }
                 }
-            } else if (viewMode !== 'biome' && viewMode !== 'climate') {
+            } else if (viewMode !== 'biome') {
                 // 地形浮雕光照 (Hillshading)
                 if (cx > 0 && cy > 0) {
                     let leftE = generator.cells[i - 1].e;

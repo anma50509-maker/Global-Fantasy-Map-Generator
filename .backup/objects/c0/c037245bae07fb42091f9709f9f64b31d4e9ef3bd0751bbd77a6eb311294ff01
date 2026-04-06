@@ -25,7 +25,6 @@
                     <option value="pure_terrain">纯地形</option>
                     <option value="contour">纯等高线</option>
                     <option value="climate">气候热力图</option>
-                    <option value="biome">自然群系分布图</option>
                 </select>
             </label>
         </div>
