@@ -119,7 +119,10 @@ class CityGenerator {
                     let ny = oy + (y / this.width) * 2.5;
                     
                     // 1. 基础大平原：略高于海平面，非常平坦适合建城
-                    let e = this.params.seaLevel + 0.02; 
+                    // 这里原先的海拔提升是 0.02，但后面我们在真实卫星视图中沙滩的判断条件是 seaLevel + 0.05
+                    // 因此这导致了大片平原因为高度小于 seaLevel + 0.05 被渲染成了黄色沙滩（或者被误认为是沙漠）。
+                    // 我们把基础高度拔高，脱离沙滩带。
+                    let e = this.params.seaLevel + 0.03; 
                     
                     // 2. 局部山脉或丘陵：增加更多的分形细节，消除圆滑感，使其崎岖破碎
                     let hillMask = noise(nx * 0.8, ny * 0.8);
@@ -686,8 +689,8 @@ class CityGenerator {
                     } else {
                         // 根据高度上色：沙滩 -> 平原 -> 丘陵 -> 山脉
                         let baseR, baseG, baseB;
-                        if (h < this.params.seaLevel + 0.05) {
-                            baseR=241; baseG=215; baseB=150; // 沙滩
+                        if (h < this.params.seaLevel + 0.01) {
+                            baseR=241; baseG=215; baseB=150; // 仅极窄的沿水海岸线渲染为沙滩
                         } else if (h < 0.6) {
                             baseR=120; baseG=200; baseB=120; // 平原草地
                         } else if (h < 0.8) {
