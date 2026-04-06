@@ -194,16 +194,15 @@ class CityGenerator {
                     let noiseVal = window.cityGenNoise ? window.cityGenNoise.noise2D(x * 0.003, y * 0.003) : 0;
                     let val = 0.5 + noiseVal * 0.4;
                     
-                    // 2. 将地图中心作为“老城区”稍微加一点点权重，但范围很广且衰减平缓，避免出现明显的圆形边界
-                    let dx = (x - this.width/2) / (this.width/2);
-                    let dy = (y - this.height/2) / (this.height/2);
-                    let distSq = dx*dx + dy*dy;
-                    val += Math.max(0, 0.3 - distSq * 0.2);
+                    // 2. 彻底移除所有中心衰减的圆形算法，避免地图上出现硬性的圆圈轮廓。
+                    // 改用一个独立的较高频地形噪声来模拟局部的商业繁华度聚集。
+                    let localNoise = window.cityGenNoise ? window.cityGenNoise.noise2D(x * 0.015, y * 0.015) : 0;
+                    val += localNoise * 0.2;
                     
                     // 3. 地形平坦度加权 (人们倾向于在平地建城，陡坡地价低)
                     let grad = this.getGradient(x, y);
-                    val -= grad.mag * 3.0; 
-                    val += (1.0 - this.heightMap[idx]) * 0.3; // 较低海拔有一定优势
+                    val -= grad.mag * 4.0; // 加大陡坡惩罚，让建筑避开山脊
+                    val += (1.0 - this.heightMap[idx]) * 0.4; // 平原和低地有更大的开发潜能
                     
                     this.pTerrain[idx] = Math.max(0, Math.min(1, val));
                 }
@@ -305,14 +304,23 @@ class CityGenerator {
             for(let i=0; i<4; i++) {
                 let rx = 50 + Math.random()*(this.width-100);
                 let ry = 50 + Math.random()*(this.width-100);
-                if (!this.waterMask[Math.floor(ry)*this.width+Math.floor(rx)]) {
-                    centers.push({x: rx, y: ry});
+                    if (!this.waterMask[Math.floor(ry)*this.width+Math.floor(rx)]) {
+                        centers.push({x: rx, y: ry});
+                    }
                 }
-            }
-            if(centers.length === 0) centers.push({x: this.width/2, y: this.width/2});
-            let mainCenter = centers[0];
-
-            let branches = [];
+                if(centers.length === 0) {
+                    // 如果随机选点全在水里，就随便选一个不靠水的陆地，而不是死板地放在画布中心
+                    for (let i = 0; i < this.width * this.height; i++) {
+                        if (!this.waterMask[i]) {
+                            centers.push({x: i % this.width, y: Math.floor(i / this.width)});
+                            break;
+                        }
+                    }
+                    if (centers.length === 0) centers.push({x: this.width/2, y: this.height/2});
+                }
+                let mainCenter = centers[0];
+                
+                let branches = [];
             // type: 3主干(有机), 2次干(网格), 1支路(网格)
             
             // 放射出几条主干道
