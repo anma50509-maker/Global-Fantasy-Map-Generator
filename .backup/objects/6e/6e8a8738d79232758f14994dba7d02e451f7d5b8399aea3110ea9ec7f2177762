@@ -494,32 +494,32 @@ function init3D() {
     const texture = new THREE.CanvasTexture(textureCanvas);
     texture.anisotropy = renderer.capabilities.getMaxAnisotropy(); // 提高纹理清晰度
     
-    // 回退到最稳定的 Canvas 纹理生成方式，避免手动构建浮点纹理引发的坐标系翻转、错位及移动端兼容性导致的严重横纹
-    let eImgData = tCtx.createImageData(width, height);
+    // 我们专门构建一张 32位浮点高度贴图来作为 bumpMap 和 displacementMap（位移贴图），避免8位 Canvas 导致的横纹和阶梯感
+    let floatData = new Float32Array(width * height * 4);
     for (let i = 0; i < generator.cells.length; i++) {
         let e = Math.max(0, Math.min(1.0, generator.cells[i].e));
-        let val = Math.floor(e * 255);
-        eImgData.data[i*4] = val;
-        eImgData.data[i*4+1] = val;
-        eImgData.data[i*4+2] = val;
-        eImgData.data[i*4+3] = 255;
+        floatData[i*4] = e;
+        floatData[i*4+1] = e;
+        floatData[i*4+2] = e;
+        floatData[i*4+3] = 1.0;
     }
-    const heightCanvas = document.createElement('canvas');
-    heightCanvas.width = width; heightCanvas.height = height;
-    heightCanvas.getContext('2d').putImageData(eImgData, 0, 0);
-    const displacementTexture = new THREE.CanvasTexture(heightCanvas);
+    const displacementTexture = new THREE.DataTexture(floatData, width, height, THREE.RGBAFormat, THREE.FloatType);
+    // 必须开启 Y 轴翻转，因为 THREE.js 默认纹理原点在左下角，而我们的 Canvas/Array 原点在左上角
+    displacementTexture.flipY = true;
+    // 使用线性滤波平滑插值，彻底消除因为像素点带来的锯齿横纹
+    displacementTexture.magFilter = THREE.LinearFilter;
+    displacementTexture.minFilter = THREE.LinearFilter;
+    displacementTexture.needsUpdate = true;
 
     // 法线/位移贴图
     const material = new THREE.MeshStandardMaterial({ 
         map: texture,
-        bumpMap: displacementTexture, 
-        // 关键点：极大地降低光影凸起强度！横纹本质是等高线阶梯在光照下被无限放大，将 bumpScale 降到微小的值以追求一种非常温和的表面粗糙感
-        bumpScale: 0.005,
+        bumpMap: displacementTexture, // 使用平滑的浮点高度图作为凹凸贴图
+        bumpScale: 0.02, // 凹凸感强度
         displacementMap: displacementTexture,
-        // 降低真实的地形拔起高度，防止出现多层千层饼一样的断层
-        displacementScale: 0.015,
-        roughness: 0.8,
-        metalness: 0.1
+        displacementScale: 0.04, // 真实的地形拔起高度
+        roughness: 0.8,        // 地表较为粗糙
+        metalness: 0.1         // 避免塑料感
     });
     
     // 为了让 displacementMap 有足够的顶点来拉伸，我们需要把球体的分段数调高
