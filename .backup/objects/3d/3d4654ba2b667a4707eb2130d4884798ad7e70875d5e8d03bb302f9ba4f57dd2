@@ -283,10 +283,25 @@ function draw() {
     // --- 更新 3D 地球贴图并直接将结果复制回主 Canvas ---
     if (typeof globe !== 'undefined' && globe) {
         globe.material.map = new THREE.CanvasTexture(textureCanvas);
-        // 去除动态更新的所有法线和位移贴图
-        globe.material.bumpMap = null;
-        globe.material.displacementMap = null;
-        globe.material.needsUpdate = true;
+        
+        // 使用标准 8 位 Canvas 构建高度图，最稳定兼容
+        let eImgData = tCtx.createImageData(width, height);
+        for (let i = 0; i < generator.cells.length; i++) {
+            let e = Math.max(0, Math.min(1.0, generator.cells[i].e));
+            let val = Math.floor(e * 255);
+            eImgData.data[i*4] = val;
+            eImgData.data[i*4+1] = val;
+            eImgData.data[i*4+2] = val;
+            eImgData.data[i*4+3] = 255;
+        }
+        const heightCanvas = document.createElement('canvas');
+        heightCanvas.width = width; heightCanvas.height = height;
+        heightCanvas.getContext('2d').putImageData(eImgData, 0, 0);
+        let displacementTexture = new THREE.CanvasTexture(heightCanvas);
+        
+        globe.material.bumpMap = displacementTexture;
+        globe.material.displacementMap = displacementTexture;
+        globe.material.map.needsUpdate = true;
     }
     
     // 直接将无损的长方形 2D 地图画到可见的主画布上
