@@ -187,12 +187,23 @@ class CityGenerator {
                         continue;
                     }
                     
-                    // 简化版：越靠近中心、越靠近水边地价越高 (暂时代替距离变换)
-                    let distToCenter = Math.sqrt(Math.pow(x - this.width/2, 2) + Math.pow(y - this.height/2, 2)) / (this.width/2);
-                    let val = 1.0 - distToCenter * 0.5; 
+                    // 废弃之前的单一中心圆形辐射！引入自然的分形噪声与多中心结构来决定地价潜能
+                    // 这会让城市建成区呈现自然的不规则蔓延，而非一个死板的大圆球。
                     
-                    // 加入一点地形平坦度（简化：这里直接用地形高度倒数代替坡度）
-                    val += (1.0 - this.heightMap[idx]) * 0.5;
+                    // 1. 低频地形噪声（模拟资源/区位潜力的自然分布）
+                    let noiseVal = window.cityGenNoise ? window.cityGenNoise.noise2D(x * 0.003, y * 0.003) : 0;
+                    let val = 0.5 + noiseVal * 0.4;
+                    
+                    // 2. 将地图中心作为“老城区”稍微加一点点权重，但范围很广且衰减平缓，避免出现明显的圆形边界
+                    let dx = (x - this.width/2) / (this.width/2);
+                    let dy = (y - this.height/2) / (this.height/2);
+                    let distSq = dx*dx + dy*dy;
+                    val += Math.max(0, 0.3 - distSq * 0.2);
+                    
+                    // 3. 地形平坦度加权 (人们倾向于在平地建城，陡坡地价低)
+                    let grad = this.getGradient(x, y);
+                    val -= grad.mag * 3.0; 
+                    val += (1.0 - this.heightMap[idx]) * 0.3; // 较低海拔有一定优势
                     
                     this.pTerrain[idx] = Math.max(0, Math.min(1, val));
                 }
