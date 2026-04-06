@@ -377,9 +377,16 @@ class MapGenerator {
         let processedCount = 0;
         let totalCells = this.width * this.height;
 
+        // 筛选出宜居带陆地，排除极端靠近南北极的高纬度地区作为首都
+        let habitableCells = landCells.filter(c => {
+            let normalizedY = c.y / this.height;
+            return normalizedY > 0.15 && normalizedY < 0.85; // 抛弃上下各 15% 的极地
+        });
+        if (habitableCells.length < count * 2) habitableCells = landCells;
+
         // 随机放置首都种子
         for (let i = 0; i < count; i++) {
-            let cell = landCells[Math.floor(Math.random() * landCells.length)];
+            let cell = habitableCells[Math.floor(Math.random() * habitableCells.length)];
             if (cell.nation === -1) {
                 cell.nation = i;
                 // 使用出版物标准政区图的柔和粉彩(Pastel)配色
@@ -430,9 +437,19 @@ class MapGenerator {
                 
                 let moveCost = 1;
                 if (nc.e >= this.seaLevel) {
-                    moveCost = Math.floor(1 + (nc.e - this.seaLevel) * 40); 
+                    // 爬坡惩罚，使得高山更容易成为天然国界
+                    moveCost = Math.floor(1 + (nc.e - this.seaLevel) * 60);
+                    // 引入高频随机噪声作为“环境阻力”，让国界线变得像分形海岸线一样崎岖破碎
+                    let borderNoise = this.noiseSeamless(nx / this.width, ny / this.height, 60, 4);
+                    if (borderNoise > 0) {
+                        moveCost += Math.floor(borderNoise * 15);
+                    }
+                    // 跨河惩罚，使国界线倾向于沿着河流划分
+                    if (nc.isRiver && !c.isRiver) {
+                        moveCost += 20;
+                    }
                 } else {
-                    moveCost = 25; 
+                    moveCost = 50; // 加大跨海惩罚
                 }
                 
                 let newCost = currentBucketIndex + moveCost;
