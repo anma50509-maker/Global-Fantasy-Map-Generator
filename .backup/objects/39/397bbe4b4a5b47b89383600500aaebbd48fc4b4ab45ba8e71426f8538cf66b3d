@@ -476,15 +476,20 @@ function init3D() {
     const texture = new THREE.CanvasTexture(textureCanvas);
     texture.anisotropy = renderer.capabilities.getMaxAnisotropy(); // 提高纹理清晰度
     
-    // 回归最稳定的、只有反光和光照阴影的纯净地球材质
+    // 直接使用 2D 画布纹理，去除所有导致横纹和锯齿的高度/凹凸贴图。
+    // 因为底层生成的 8 位精度数据在 3D 表面拉伸时必然会产生灾难性的阶梯纹理。
+    // 使用 MeshStandardMaterial 并借助环境光和平行光，地球已经能表现出极具立体感的 3D 效果！
+    // 初始化时也加上一个默认的高度图占位符，以便球体拥有相关的 UV 属性
     const material = new THREE.MeshStandardMaterial({ 
         map: texture,
+        bumpMap: texture, // 占位符，将在 draw 循环中被替换为平滑高度图
+        displacementMap: texture,
         roughness: 0.6,
         metalness: 0.1
     });
-
-    // 既然没有几何位移了，只需要基本的分段数即可，提升性能
-    const geometry = new THREE.SphereGeometry(1, 64, 64);
+    
+    // 为了让 displacementMap 有足够的顶点来拉伸，我们需要把球体的分段数调高
+    const geometry = new THREE.SphereGeometry(1, 512, 512);
     
     globe = new THREE.Mesh(geometry, material);
     
