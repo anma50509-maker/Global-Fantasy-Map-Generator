@@ -193,19 +193,21 @@ class CityGenerator {
                     // 废弃之前的单一中心圆形辐射！引入自然的分形噪声与多中心结构来决定地价潜能
                     // 这会让城市建成区呈现自然的不规则蔓延，而非一个死板的大圆球。
                     
-                    // 1. 低频地形噪声（模拟资源/区位潜力的自然分布）
-                    let noiseVal = window.cityGenNoise ? window.cityGenNoise.noise2D(x * 0.003, y * 0.003) : 0;
-                    let val = 0.5 + noiseVal * 0.4;
+                    // 1. 极其低频的地形噪声（定义城市主城区的宏大连片结构，避免像芝麻点一样散落）
+                    let noiseVal = window.cityGenNoise ? window.cityGenNoise.noise2D(x * 0.001, y * 0.001) : 0;
+                    let val = 0.5 + noiseVal * 0.6; // 加大主轮廓的权重
                     
-                    // 2. 彻底移除所有中心衰减的圆形算法，避免地图上出现硬性的圆圈轮廓。
-                    // 改用一个独立的较高频地形噪声来模拟局部的商业繁华度聚集。
-                    let localNoise = window.cityGenNoise ? window.cityGenNoise.noise2D(x * 0.015, y * 0.015) : 0;
-                    val += localNoise * 0.2;
+                    // 2. 移除中心衰减的圆形算法，改用中频噪声来塑造城区的凹凸边缘，而不是极高频的碎点
+                    let localNoise = window.cityGenNoise ? window.cityGenNoise.noise2D(x * 0.005, y * 0.005) : 0;
+                    val += localNoise * 0.3;
+                    
+                    // 增强马太效应，让高的地方更高，低的地方更低，形成连片的城和纯粹的野外，消灭碎点
+                    val = Math.pow(Math.max(0, val), 1.5);
                     
                     // 3. 地形平坦度加权 (人们倾向于在平地建城，陡坡地价低)
                     let grad = this.getGradient(x, y);
-                    val -= grad.mag * 4.0; // 加大陡坡惩罚，让建筑避开山脊
-                    val += (1.0 - this.heightMap[idx]) * 0.4; // 平原和低地有更大的开发潜能
+                    val -= grad.mag * 5.0; // 加大陡坡惩罚，让建筑严格避开山脊
+                    val += (1.0 - this.heightMap[idx]) * 0.3; // 平原和低地有更大的开发潜能
                     
                     this.pTerrain[idx] = Math.max(0, Math.min(1, val));
                 }
@@ -586,9 +588,15 @@ class CityGenerator {
                     if (isBuiltUp) {
                         if (v >= this.qCom) this.zones[i] = 0; // 商业
                         else this.zones[i] = 1; // 居住
-                    } else {
-                        // 如果不满足 isBuiltUp，直接视为未开发，从而在视觉上形成图2中建筑区内部的黑色空隙（露出的底色）
+                    } else if (v >= this.qRes) {
+                        // 落在高地价区但属于镂空街区/广场，不赋任何实体建筑属性，保留底色
                         this.zones[i] = 4; // 未开发
+                    } else {
+                        // 如果连基础的居住门槛都没达到，那就根本不应该建任何东西，纯纯的大地
+                        // 原先的逻辑其实是对的（也是赋4），但是外围的零星高地价点由于自然噪声产生了散落的“碎点”
+                        // 我们需要通过平滑或者更严格的阈值来抑制这些外围的散落建筑。
+                        // 其实对于 v < qRes，本来就是非建筑区。为了避免散落的小点，可以将其视为大地底色。
+                        this.zones[i] = 4; 
                     }
                 }
             }
