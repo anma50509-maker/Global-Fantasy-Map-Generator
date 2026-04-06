@@ -493,40 +493,19 @@ function init3D() {
     const texture = new THREE.CanvasTexture(textureCanvas);
     texture.anisotropy = renderer.capabilities.getMaxAnisotropy(); // 提高纹理清晰度
     
-    // 我们专门构建一张灰度的高度贴图来作为 bump/displacement 贴图，避免用彩色地形图做会导致等高线一样的诡异波纹
+    // 我们专门构建一张灰度的高度贴图来作为 displacementMap（位移贴图），避免用彩色地形图做 bumpMap 导致等高线一样的诡异波纹
+    let eImgData = tCtx.createImageData(width, height);
+    for (let i = 0; i < generator.cells.length; i++) {
+        let e = Math.max(0, Math.min(1.0, generator.cells[i].e));
+        let val = Math.floor(e * 255);
+        eImgData.data[i*4] = val;
+        eImgData.data[i*4+1] = val;
+        eImgData.data[i*4+2] = val;
+        eImgData.data[i*4+3] = 255;
+    }
     const heightCanvas = document.createElement('canvas');
     heightCanvas.width = width; heightCanvas.height = height;
-    const hCtx = heightCanvas.getContext('2d');
-    
-    // 背景涂黑（深海）
-    hCtx.fillStyle = '#000000';
-    hCtx.fillRect(0, 0, width, height);
-
-    // 像渲染 2D 地图一样，将地块的多边形渲染为灰度值
-    for (let i = 0; i < generator.cells.length; i++) {
-        let c = generator.cells[i];
-        let e = Math.max(0, Math.min(1.0, c.e));
-        
-        let val = Math.floor(e * 255);
-        // 为了提高性能，过滤掉海平面以下的纯黑色绘制（因为背景已经是黑色的了）
-        if (c.e < generator.seaLevel && val < 50) continue;
-
-        hCtx.fillStyle = `rgb(${val},${val},${val})`;
-        hCtx.beginPath();
-        for (let j = 0; j < c.v.length; j++) {
-            let p = generator.pts[c.v[j]];
-            if (j === 0) hCtx.moveTo(p[0] * width, p[1] * height);
-            else hCtx.lineTo(p[0] * width, p[1] * height);
-        }
-        hCtx.closePath();
-        hCtx.fill();
-        
-        // 稍微画一下边框，防止多边形之间出现黑缝隙
-        hCtx.strokeStyle = `rgb(${val},${val},${val})`;
-        hCtx.lineWidth = 1;
-        hCtx.stroke();
-    }
-    
+    heightCanvas.getContext('2d').putImageData(eImgData, 0, 0);
     const displacementTexture = new THREE.CanvasTexture(heightCanvas);
 
     // 法线/位移贴图
