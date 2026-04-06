@@ -31,24 +31,53 @@ function draw() {
         let c = generator.cells[i];
         let r, g, b;
 
-        // 海洋与陆地基于海拔赋予标准出版颜色
+        if (viewMode === 'climate') {
+            // 全球气候模拟视图：降水与温度热力图混合
+            // 温度决定红蓝色调（赤道红，极地蓝），降水决定绿色调（湿润绿，干燥黄）
+            if (c.e < generator.seaLevel) {
+                // 海洋气候水温：根据纬度渐变，赤道青蓝，极地深蓝
+                let tempRatio = Math.max(0, Math.min(1, c.temp));
+                r = Math.floor(10 + tempRatio * 50);
+                g = Math.floor(50 + tempRatio * 150);
+                b = Math.floor(120 + tempRatio * 80);
+            } else {
+                // 陆地气候分布
+                let tempRatio = Math.max(0, Math.min(1, c.temp));
+                let moistRatio = Math.max(0, Math.min(1, c.m));
+                
+                // 温度提供红-蓝色（冷暖）
+                let baseR = Math.floor(tempRatio * 220);
+                let baseB = Math.floor((1.0 - tempRatio) * 220);
+                
+                // 湿度混合绿-黄色（干湿）
+                let baseG = Math.floor(moistRatio * 200 + tempRatio * 55); 
+                
+                r = Math.floor(baseR * 0.7 + (1.0 - moistRatio) * 150 * 0.3); // 干燥的地方偏红黄
+                g = Math.floor(baseG);
+                b = Math.floor(baseB * 0.8 + moistRatio * 50 * 0.2);
+                
+                // 极寒地区被冰雪覆盖
+                if (c.temp < 0.2 && c.m > 0.4) {
+                    r = 240; g = 245; b = 255;
+                }
+            }
+        } else {
+            // 海洋与陆地基于海拔赋予标准出版颜色
             if (c.e < generator.seaLevel) {
                 // 标准出版地图的浅蓝色海洋，越深越蓝
-                // 使用动态的海平面阈值来计算深度占比
                 let depth = (generator.seaLevel - c.e) / Math.max(0.01, generator.seaLevel);
-                depth = Math.max(0, Math.min(1.0, depth)); // 防止 depth 越界变成黑色虚空
-                // 浅海：216, 240, 250 -> 深海：160, 210, 240
+                depth = Math.max(0, Math.min(1.0, depth));
                 r = 216 - depth * 56;
                 g = 240 - depth * 30;
                 b = 250 - depth * 10;
             } else {
-            // 计算陆地相对海拔 0.0 ~ 1.0
-            let landE = (c.e - generator.seaLevel) / (1.0 - generator.seaLevel);
-            // 查找等高线颜色
-            for (let tc of terrainColors) {
-                if (landE <= tc.limit) { r = tc.r; g = tc.g; b = tc.b; break; }
+                // 计算陆地相对海拔 0.0 ~ 1.0
+                let landE = (c.e - generator.seaLevel) / (1.0 - generator.seaLevel);
+                for (let tc of terrainColors) {
+                    if (landE <= tc.limit) { r = tc.r; g = tc.g; b = tc.b; break; }
+                }
+                if (r === undefined) { r = 245; g = 245; b = 245; } // 超出部分为白
             }
-            if (r === undefined) { r = 245; g = 245; b = 245; } // 超出部分为白
             
             let cx = i % width;
             let cy = Math.floor(i / width);
@@ -238,12 +267,18 @@ function draw() {
     // --- 更新 3D 地球贴图并直接将结果复制回主 Canvas ---
     if (typeof globe !== 'undefined' && globe) {
         globe.material.map = new THREE.CanvasTexture(textureCanvas);
+        // 如果我们有法线贴图(bumpMap)，也需要更新
+        if (globe.material.bumpMap) {
+            globe.material.bumpMap = new THREE.CanvasTexture(textureCanvas);
+            globe.material.bumpMap.needsUpdate = true;
+        }
         globe.material.map.needsUpdate = true;
     }
     
     // 直接将无损的长方形 2D 地图画到可见的主画布上
     ctx.drawImage(textureCanvas, 0, 0);
 }
+
 function updateLegend() {
     const legend = document.getElementById('legend');
     legend.innerHTML = '<h3>标准等高线地形图例</h3>';
@@ -400,8 +435,16 @@ function init3D() {
     // 关键：将 2D 画布作为纹理贴图！
     const texture = new THREE.CanvasTexture(textureCanvas);
     texture.anisotropy = renderer.capabilities.getMaxAnisotropy(); // 提高纹理清晰度
-    // 基础材质，不需要光照，直接显示贴图颜色
-    const material = new THREE.MeshBasicMaterial({ map: texture });
+    
+    // 法线贴图（利用同一地形图生成凹凸感，模拟地形阴影）
+    // 为了利用法线，我们需要将材质换为响应光照的 MeshStandardMaterial，并设置法线纹理（其实可以用同一画布或者专门提取的位移画布，这里用凹凸贴图最简单）
+    const material = new THREE.MeshStandardMaterial({ 
+        map: texture,
+        bumpMap: texture,      // 将彩色地形图直接用作凹凸贴图
+        bumpScale: 0.05,       // 控制凹凸（崎岖）程度
+        roughness: 0.8,        // 地表较为粗糙
+        metalness: 0.1         // 避免塑料感
+    });
     
     globe = new THREE.Mesh(geometry, material);
     
@@ -410,6 +453,18 @@ function init3D() {
     globe.scale.x = -1;
     
     scene.add(globe);
+    
+    // 添加光照系统以显示 3D 法线凹凸效果
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); // 环境光，保持背光面可见
+    scene.add(ambientLight);
+    
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2); // 主光源，模拟太阳光
+    directionalLight.position.set(5, 3, 5); // 光源位置
+    scene.add(directionalLight);
+    
+    // 我们也把光源放到相机上，让正对用户的面总是被照亮
+    camera.add(directionalLight);
+    scene.add(camera);
 
     // 轨道控制器 (支持拖拽旋转，滚轮/双指缩放)
     controls = new THREE.OrbitControls(camera, renderer.domElement);
