@@ -72,12 +72,11 @@ function draw() {
                 let biome = c.biome || '深海';
                 // 使用 generator 内置逻辑或简化的假颜色
                 const biomePalette = {
-                    '深海': [20, 30, 80], '海洋': [40, 60, 140], '浅海': [80, 160, 200], '沙滩': [224, 208, 144],
-                    '雪地': [250, 250, 250], '高山冻原': [200, 210, 220], '裸岩': [140, 140, 145],
-                    '极地冰盖': [232, 244, 248], '苔原': [160, 176, 160], 
-                    '泰加林(针叶林)': [46, 91, 50], '寒冷草原': [139, 154, 96], 
-                    '落叶阔叶林': [58, 122, 58], '温带雨林': [46, 107, 58], '温带草原': [138, 171, 90], '温带沙漠': [194, 178, 128],
-                    '季雨林': [42, 90, 42], '热带雨林': [21, 61, 21], '稀树草原': [168, 176, 80], '热带沙漠': [224, 192, 96]
+                    '深海': [20, 30, 80], '海洋': [40, 60, 140], '浅海': [80, 160, 200], '沙滩': [240, 230, 160],
+                    '雪地': [240, 250, 255], '高山冻原': [200, 210, 220], '裸岩': [140, 140, 145],
+                    '针叶林': [30, 80, 40], '灌木丛': [160, 170, 100], '热带雨林': [20, 100, 20], 
+                    '稀树草原': [180, 190, 80], '沙漠': [230, 210, 120], '森林': [40, 120, 50],
+                    '草地': [130, 180, 80], '平原': [140, 200, 100], '寒带森林': [50, 100, 80], '冻原': [180, 190, 190]
                 };
                 let bc = biomePalette[biome] || [200, 200, 200];
                 r = bc[0]; g = bc[1]; b = bc[2];
@@ -371,7 +370,8 @@ function draw() {
         let tex = new THREE.CanvasTexture(textureCanvas);
         tex.colorSpace = THREE.SRGBColorSpace;
         tex.wrapS = THREE.RepeatWrapping;
-        tex.repeat.x = -1;
+        tex.repeat.x = -1; // 必须将纹理贴图沿 X 轴翻转，这是彻底解决 Three.js 球面纹理镜像标准做法
+        globe.rotation.y = Math.PI; // 将球体旋转 180 度，把翻转带来的反面调整回正面朝向相机
         globe.material.map = tex;
         globe.material.needsUpdate = true;
     }
@@ -384,24 +384,23 @@ function updateLegend() {
     const legend = document.getElementById('legend');
     const viewMode = document.getElementById('viewMode').value;
     
-        if (viewMode === 'biome') {
-            legend.innerHTML = '<h3>自然群系分布图例</h3>';
-            // 使用实际渲染时采用的本地化变量
-            const bp = {
-                '深海': [20, 30, 80], '海洋': [40, 60, 140], '浅海': [80, 160, 200], '沙滩': [224, 208, 144],
-                '雪地': [250, 250, 250], '高山冻原': [200, 210, 220], '裸岩': [140, 140, 145],
-                '极地冰盖': [232, 244, 248], '苔原': [160, 176, 160], 
-                '泰加林(针叶林)': [46, 91, 50], '寒冷草原': [139, 154, 96], 
-                '落叶阔叶林': [58, 122, 58], '温带雨林': [46, 107, 58], '温带草原': [138, 171, 90], '温带沙漠': [194, 178, 128],
-                '季雨林': [42, 90, 42], '热带雨林': [21, 61, 21], '稀树草原': [168, 176, 80], '热带沙漠': [224, 192, 96]
-            };
-            for (let key in bp) {
-                if (key === '深海' || key === '海洋' || key === '浅海') continue;
-                legend.innerHTML += `<div class="legend-item">
-                    <div class="color-box" style="background-color: rgb(${bp[key][0]},${bp[key][1]},${bp[key][2]})"></div>
-                    <span>${key}</span>
-                </div>`;
-            }
+    if (viewMode === 'biome') {
+        legend.innerHTML = '<h3>自然群系分布图例</h3>';
+        // 使用实际渲染时采用的本地化变量
+        const bp = {
+            '深海': [20, 30, 80], '海洋': [40, 60, 140], '浅海': [80, 160, 200], '沙滩': [240, 230, 160],
+            '雪地': [240, 250, 255], '高山冻原': [200, 210, 220], '裸岩': [140, 140, 145],
+            '针叶林': [30, 80, 40], '灌木丛': [160, 170, 100], '热带雨林': [20, 100, 20], 
+            '稀树草原': [180, 190, 80], '沙漠': [230, 210, 120], '森林': [40, 120, 50],
+            '草地': [130, 180, 80], '平原': [140, 200, 100], '寒带森林': [50, 100, 80], '冻原': [180, 190, 190]
+        };
+        for (let key in bp) {
+            if (key === '深海' || key === '海洋' || key === '浅海') continue;
+            legend.innerHTML += `<div class="legend-item">
+                <div class="color-box" style="background-color: rgb(${bp[key][0]},${bp[key][1]},${bp[key][2]})"></div>
+                <span>${key}</span>
+            </div>`;
+        }
     } else if (viewMode === 'climate') {
         legend.innerHTML = '<h3>气候分布图例</h3>';
         legend.innerHTML += `<div style="margin-bottom:10px;">
@@ -473,11 +472,11 @@ document.getElementById('exportBtn').addEventListener('click', () => {
         let legendItems = [];
         if (viewMode === 'biome') {
             const bp = {
-                '雪地': [250, 250, 250], '高山冻原': [200, 210, 220], '裸岩': [140, 140, 145],
-                '极地冰盖': [232, 244, 248], '苔原': [160, 176, 160], 
-                '泰加林(针叶林)': [46, 91, 50], '寒冷草原': [139, 154, 96], 
-                '落叶阔叶林': [58, 122, 58], '温带雨林': [46, 107, 58], '温带草原': [138, 171, 90], '温带沙漠': [194, 178, 128],
-                '季雨林': [42, 90, 42], '热带雨林': [21, 61, 21], '稀树草原': [168, 176, 80], '热带沙漠': [224, 192, 96]
+                '雪地': [240, 250, 255], '高山冻原': [200, 210, 220], '裸岩': [140, 140, 145],
+                '冻原': [180, 190, 190], '寒带森林': [50, 100, 80], '针叶林': [30, 80, 40], 
+                '平原': [140, 200, 100], '草地': [130, 180, 80], '森林': [40, 120, 50],
+                '沙漠': [230, 210, 120], '稀树草原': [180, 190, 80], '灌木丛': [160, 170, 100], 
+                '热带雨林': [20, 100, 20]
             };
             for (let key in bp) {
                 legendItems.push({ name: key, color: `rgb(${bp[key][0]},${bp[key][1]},${bp[key][2]})` });
@@ -622,45 +621,26 @@ function init3D() {
 
         // 设置 colorSpace 确保颜色正常
         texture.colorSpace = THREE.SRGBColorSpace;
-        // 这才是最无副作用的贴图翻转方法，在原 Canvas 像素被送进 GPU 渲染前水平翻转
         texture.wrapS = THREE.RepeatWrapping;
-        texture.repeat.x = -1;
+        texture.repeat.x = -1; // 必须翻转纹理
 
-        // 动态生成粗糙度贴图 (Roughness Map)，用于区分海洋(光滑反光)和陆地(粗糙哑光)
-        const roughnessCanvas = document.createElement('canvas');
-        roughnessCanvas.width = width; roughnessCanvas.height = height;
-        const rCtx = roughnessCanvas.getContext('2d');
-        let rImgData = rCtx.createImageData(width, height);
-        for (let i = 0; i < width * height; i++) {
-            let c = generator.cells[i];
-            // 海洋区域赋予极低的粗糙度 (如 0.1, 黑色/深灰)，使之像水面一样反射高光
-            // 陆地区域赋予极高的粗糙度 (如 0.95, 白色/浅灰)，让其呈现哑光的自然地貌感
-            let roughnessVal = c.e < generator.seaLevel ? 25 : 240; 
-            rImgData.data[i*4] = roughnessVal;
-            rImgData.data[i*4+1] = roughnessVal;
-            rImgData.data[i*4+2] = roughnessVal;
-            rImgData.data[i*4+3] = 255;
-        }
-        rCtx.putImageData(rImgData, 0, 0);
-        const roughnessTexture = new THREE.CanvasTexture(roughnessCanvas);
-        roughnessTexture.wrapS = THREE.RepeatWrapping;
-        roughnessTexture.repeat.x = -1;
-
-        // 具有动态质感的材质
+        // 回归最稳定的、只有反光和光照阴影的纯净地球材质
         const material = new THREE.MeshStandardMaterial({
             map: texture,
-            roughnessMap: roughnessTexture, // 应用粗糙度贴图，精准控制反光区域
-            roughness: 1.0,                 // 基础值拉满，由贴图去决定最终程度
-            metalness: 0.1                  // 稍微给一点点全局反射基底，让水面反光更透亮
+            roughness: 0.9,        // 大幅增加粗糙度，避免像台球一样高光反光
+            metalness: 0.0         // 移除金属感，地形不是金属
         });
         
         // 既然没有几何位移了，只需要基本的分段数即可，提升性能
-        // 不再使用缩放几何体的方法，这会导致法线和背向剔除(Culling)错乱，表现为扭曲以及 OrbitControls 手势反向。
         const geometry = new THREE.SphereGeometry(1, 64, 64);
 
         globe = new THREE.Mesh(geometry, material);
-        // 让球体绕 Y 轴转半圈，因为 texture.repeat.x = -1 会将原本应该在正面的内容翻转到背面
-        globe.rotation.y = Math.PI; 
+        
+        // 关键修复：Three.js 默认将纹理贴图视为从外向内看，但在球面映射中，
+        // X 轴（U 坐标）其实是从正面左向右的，默认贴到球体上文字会变成镜像（如同从球内部看出去）。
+        // 修复方法不是简单翻转 scale.x (会导致背面也被翻转、光照变怪)，
+        // 而是将球体沿 Y 轴旋转 180 度，并让贴图在 X 轴上镜像，这样文字和地形不仅是正的，方向也与 2D 一致。
+        globe.scale.x = 1; // 恢复正常缩放
         
         scene.add(globe);
 
@@ -730,9 +710,9 @@ document.getElementById('toggle3DBtn').addEventListener('click', () => {
         // 需要强制更新材质的纹理贴图
         let tex = new THREE.CanvasTexture(textureCanvas);
         tex.colorSpace = THREE.SRGBColorSpace;
-        // 既然我们初始化时用了翻转贴图 + 旋转的方式，更新时也必须保持贴图的 wrapS 设置
         tex.wrapS = THREE.RepeatWrapping;
         tex.repeat.x = -1;
+        globe.rotation.y = Math.PI;
         globe.material.map = tex;
         globe.material.needsUpdate = true;
             renderer.domElement.style.display = 'block';

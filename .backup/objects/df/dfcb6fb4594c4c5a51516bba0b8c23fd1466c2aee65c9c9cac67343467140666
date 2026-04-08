@@ -396,7 +396,6 @@ class MapGenerator {
     }
 
     assignBiomes() {
-        // 使用标准的 Whittaker 生态群系图表 (Temperature & Moisture)
         for (let i = 0; i < this.cells.length; i++) {
             let c = this.cells[i];
             if (c.e < this.seaLevel) {
@@ -404,35 +403,26 @@ class MapGenerator {
                 else if (c.e < this.seaLevel - 0.05) c.biome = '海洋';
                 else c.biome = '浅海';
             } else {
-                let t = c.temp;
-                let m = c.m;
-                
-                if (t > 0.8) {
-                    // 热带
-                    if (m > 0.65) c.biome = '热带雨林';
-                    else if (m > 0.4) c.biome = '季雨林';
-                    else if (m > 0.15) c.biome = '稀树草原';
-                    else c.biome = '热带沙漠';
-                } else if (t > 0.5) {
-                    // 温带
-                    if (m > 0.6) c.biome = '温带雨林';
-                    else if (m > 0.35) c.biome = '落叶阔叶林';
-                    else if (m > 0.15) c.biome = '温带草原';
-                    else c.biome = '温带沙漠';
-                } else if (t > 0.25) {
-                    // 寒温带
-                    if (m > 0.4) c.biome = '泰加林(针叶林)';
-                    else c.biome = '寒冷草原';
+                if (c.e > 0.8) c.biome = '雪地';
+                else if (c.e > 0.7) c.biome = '高山冻原';
+                else if (c.e > 0.6) c.biome = '裸岩';
+                else if (c.e > 0.5) {
+                    if (c.m > 0.6) c.biome = '针叶林';
+                    else c.biome = '灌木丛';
+                } else if (c.temp > 0.7) {
+                    if (c.m > 0.6) c.biome = '热带雨林';
+                    else if (c.m > 0.3) c.biome = '稀树草原';
+                    else c.biome = '沙漠';
+                } else if (c.temp > 0.4) {
+                    if (c.m > 0.6) c.biome = '森林';
+                    else if (c.m > 0.3) c.biome = '草地';
+                    else c.biome = '平原';
                 } else {
-                    // 极地
-                    if (m > 0.2) c.biome = '苔原';
-                    else c.biome = '极地冰盖';
+                    if (c.m > 0.5) c.biome = '寒带森林';
+                    else c.biome = '冻原';
                 }
                 
-                // 特殊地貌覆盖
-                if (c.e > 0.85) c.biome = '雪地'; // 极高海拔强行冰雪
-                else if (c.e > 0.75 && t > 0.2) c.biome = '高山冻原'; // 高海拔缓冲
-                else if (c.e < this.seaLevel + 0.015 && t > 0.35 && m < 0.8) c.biome = '沙滩';
+                if (c.e < this.seaLevel + 0.02 && c.temp > 0.3 && c.m < 0.8) c.biome = '沙滩';
             }
         }
     }
