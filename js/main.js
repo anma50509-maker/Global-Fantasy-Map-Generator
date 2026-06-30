@@ -83,12 +83,12 @@ function draw() {
                 r = bc[0]; g = bc[1]; b = bc[2];
             } else {
                 if (c.e < generator.seaLevel) {
-                    // 标准出版地图的浅蓝色海洋，越深越蓝
+                    // 深邃蓝色海洋，高饱和扁平化质感
                     let depth = (generator.seaLevel - c.e) / Math.max(0.01, generator.seaLevel);
                     depth = Math.max(0, Math.min(1.0, depth));
-                    r = 216 - depth * 56;
-                    g = 240 - depth * 30;
-                    b = 250 - depth * 10;
+                    r = 10 - depth * 5;
+                    g = 55 - depth * 15;
+                    b = 100 - depth * 20;
                 } else {
                     // 计算陆地相对海拔 0.0 ~ 1.0
                     let landE = (c.e - generator.seaLevel) / (1.0 - generator.seaLevel);
@@ -136,19 +136,20 @@ function draw() {
                     }
                 }
             } else if (viewMode !== 'biome' && viewMode !== 'climate') {
-                // 地形浮雕光照 (Hillshading)
-                if (cx > 0 && cy > 0) {
+                // 地形浮雕光照 (Hillshading) - 仅限陆地，强化山脉阴影对比度
+                if (cx > 0 && cy > 0 && c.e >= generator.seaLevel) {
                     let leftE = generator.cells[i - 1].e;
                     let topE = generator.cells[i - width].e;
                     let dx = c.e - leftE;
                     let dy = c.e - topE;
-                    // 温和的光影对比度，体现出细腻的地形
-                    let shade = (dx + dy) * 12; 
+                    
+                    // 提升阴影对比度，模拟古典地图的固定光源立体感
+                    let shade = (dx + dy) * 20; 
                     let lightMod = 1.0 + shade;
-                    
-                    // 限制光照范围：防止高山悬崖处的背光面阴影变成死黑
-                    lightMod = Math.max(0.4, Math.min(1.8, lightMod));
-                    
+
+                    // 加深背光面的阴影强度
+                    lightMod = Math.max(0.2, Math.min(1.8, lightMod));
+
                     r = Math.min(255, r * lightMod);
                     g = Math.min(255, g * lightMod);
                     b = Math.min(255, b * lightMod);
@@ -165,9 +166,9 @@ function draw() {
         }
 
         // 国家颜色与标准出版图边界渲染
-        if (c.nation !== -1 && c.e >= generator.seaLevel && viewMode !== 'pure_terrain' && viewMode !== 'contour' && !c.isLake) {
+        // 加入国家领土配色与边界
+        if (document.getElementById('showNations').checked && c.nation !== -1 && c.e >= generator.seaLevel && viewMode !== 'pure_terrain' && viewMode !== 'contour' && !c.isLake) {
             let nColor = generator.nations[c.nation].rgb;
-            
             if (viewMode === 'political') {
                 // 政区图模式：完全使用柔和明亮的国家颜色，保留极轻微地形阴影
                 r = r * 0.15 + nColor.r * 0.85;
@@ -183,7 +184,7 @@ function draw() {
                 b = b * 0.90 + nColor.b * 0.10;
                 
                 // 地势图上标准的紫色国界线，且周边轻微泛紫作为领土光晕
-                if (c.border) { 
+                if (c.border) {
                     r = 138; g = 43; b = 226; // 蓝紫色边境线
                 }
             }
@@ -256,10 +257,10 @@ function draw() {
         tCtx.stroke();
     }
 
-        // 绘制首都和国家名称 (纯地形和等高线模式下不显示)
-        if (viewMode !== 'pure_terrain' && viewMode !== 'contour') {
-            for (let n of generator.nations) {
-                // 如果用户添加了国家名称，我们需要计算文字排版和方向
+    // 绘制首都和国家名称 (纯地形和等高线模式下不显示)
+    if (viewMode !== 'pure_terrain' && viewMode !== 'contour' && document.getElementById('showNations').checked) {
+        for (let n of generator.nations) {
+            // 如果用户添加了国家名称，我们需要计算文字排版和方向
                 if (n.name && !n.renderData) {
                     let pts = [];
                     for (let i = 0; i < width * height; i++) {
@@ -378,30 +379,156 @@ function draw() {
     
     // 直接将无损的长方形 2D 地图画到可见的主画布上
     ctx.drawImage(textureCanvas, 0, 0);
+
+    // --- 在主画布上额外绘制覆盖层（洋流等简易线条指示，不在 3D 球体上显示） ---
+    if (document.getElementById('showOceanCurrents').checked && generator.cells) {
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        
+        // Gyres（大洋环流）可视化算法：结合物理力场与适当惯性
+        const numStreamlines = 150;  // 增加种子寻找环流入口
+        const maxSteps = 150;        // 环流闭合需要的步数
+        const stepSize = 5;          // 缩小步进，让转弯更平滑紧凑
+        
+        let seedInterval = Math.floor((width * height) / numStreamlines);
+        let visitedGrid = new Uint8Array(width * height);
+        
+        for (let i = 0; i < width * height; i += seedInterval) {
+            let startCell = generator.cells[i];
+            
+            // 只要有明显的洋流就可能成为起点
+            if (startCell && startCell.e < generator.seaLevel && startCell.current && !visitedGrid[i] &&
+                (Math.abs(startCell.current.u) > 0.1 || Math.abs(startCell.current.v) > 0.1)) {
+                
+                // 判断流线起始点是暖流还是寒流
+                let isWarm = startCell.temp > (1.0 - Math.abs(startCell.y / height * 2 - 1)) * 30 - 5;
+                ctx.strokeStyle = isWarm ? `rgba(255, 60, 60, 0.8)` : `rgba(60, 150, 255, 0.8)`;
+                
+                ctx.beginPath();
+                let curX = startCell.x;
+                let curY = startCell.y;
+                ctx.moveTo(curX, curY);
+                
+                let points = [];
+                points.push({x: curX, y: curY});
+                
+                // 引入物理惯性：消除生硬转折的核心
+                let vx = 0;
+                let vy = 0;
+                
+                // 开始向前粒子追踪
+                for (let step = 0; step < maxSteps; step++) {
+                    let gridX = Math.floor(curX);
+                    let gridY = Math.floor(curY);
+                    
+                    // 水平方向地图首尾环绕
+                    if (gridX < 0) gridX += width;
+                    if (gridX >= width) gridX -= width;
+                    
+                    // 碰触到南北极绝对边缘就断线
+                    if (gridY < 0 || gridY >= height) break; 
+                    
+                    let idx = gridY * width + gridX;
+                    let c = generator.cells[idx];
+                    
+                    // 撞上陆地或遭遇无流区，线条终止
+                    if (!c || c.e >= generator.seaLevel || !c.current || 
+                        (Math.abs(c.current.u) < 0.01 && Math.abs(c.current.v) < 0.01)) {
+                        break;
+                    }
+                    
+                    // 把线条当前经过的空间及周围半径（排斥场）标记为已使用
+                    for(let dy = -3; dy <= 3; dy++) {
+                        for(let dx = -3; dx <= 3; dx++) {
+                            let ny_ = gridY + dy;
+                            let nx_ = gridX + dx;
+                            if(nx_ < 0) nx_ += width;
+                            if(nx_ >= width) nx_ -= width;
+                            if(ny_ >= 0 && ny_ < height) {
+                                visitedGrid[ny_ * width + nx_] = 1;
+                            }
+                        }
+                    }
+                    
+                    let u = c.current.u;
+                    let v = c.current.v;
+                    let speed = Math.sqrt(u*u + v*v) || 1;
+                    
+                    // 获取当前网格的绝对力场方向
+                    let gu = u / speed;
+                    let gv = v / speed;
+                    
+                    if (step === 0) {
+                        vx = gu;
+                        vy = gv;
+                    } else {
+                        // 【惯性阻尼系统】调低惯性权重，让它能快速响应底层真正的环流力场
+                        // 现在底层有完美的 Gyres 模型，不需要太强的假惯性来强制画弧线了
+                        vx = vx * 0.4 + gu * 0.6;
+                        vy = vy * 0.4 + gv * 0.6;
+                        
+                        // 重新归一化动量
+                        let vSpeed = Math.sqrt(vx*vx + vy*vy) || 1;
+                        vx /= vSpeed;
+                        vy /= vSpeed;
+                    }
+                    
+                    curX += vx * stepSize;
+                    curY += vy * stepSize;
+                    
+                    ctx.lineTo(curX, curY);
+                    points.push({x: curX, y: curY});
+                }
+                
+                // 只有足够长的线才画出来，并且在末端加上明显的填充箭头（教科书风格）
+                if (points.length > 5) {
+                    ctx.stroke();
+                    
+                    let lastPt = points[points.length - 1];
+                    let prevPt = points[points.length - 3]; // 跨越几个点计算角度更稳定
+                    let angle = Math.atan2(lastPt.y - prevPt.y, lastPt.x - prevPt.x);
+                    let arrowLen = 10;
+                    let arrowWidth = 6;
+                    
+                    ctx.fillStyle = isWarm ? `rgba(255, 60, 60, 0.9)` : `rgba(60, 150, 255, 0.9)`;
+                    ctx.beginPath();
+                    // 箭头顶点
+                    ctx.moveTo(lastPt.x + Math.cos(angle) * arrowLen, lastPt.y + Math.sin(angle) * arrowLen);
+                    // 箭头左下角
+                    ctx.lineTo(lastPt.x - Math.sin(angle) * arrowWidth, lastPt.y + Math.cos(angle) * arrowWidth);
+                    // 箭头右下角
+                    ctx.lineTo(lastPt.x + Math.sin(angle) * arrowWidth, lastPt.y - Math.cos(angle) * arrowWidth);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+            }
+        }
+    }
 }
 
 function updateLegend() {
     const legend = document.getElementById('legend');
     const viewMode = document.getElementById('viewMode').value;
     
-        if (viewMode === 'biome') {
-            legend.innerHTML = '<h3>自然群系分布图例</h3>';
-            // 使用实际渲染时采用的本地化变量
-            const bp = {
-                '深海': [20, 30, 80], '海洋': [40, 60, 140], '浅海': [80, 160, 200], '沙滩': [224, 208, 144],
-                '雪地': [250, 250, 250], '高山冻原': [200, 210, 220], '裸岩': [140, 140, 145],
-                '极地冰盖': [232, 244, 248], '苔原': [160, 176, 160], 
-                '泰加林(针叶林)': [46, 91, 50], '寒冷草原': [139, 154, 96], 
-                '落叶阔叶林': [58, 122, 58], '温带雨林': [46, 107, 58], '温带草原': [138, 171, 90], '温带沙漠': [194, 178, 128],
-                '季雨林': [42, 90, 42], '热带雨林': [21, 61, 21], '稀树草原': [168, 176, 80], '热带沙漠': [224, 192, 96]
-            };
-            for (let key in bp) {
-                if (key === '深海' || key === '海洋' || key === '浅海') continue;
-                legend.innerHTML += `<div class="legend-item">
-                    <div class="color-box" style="background-color: rgb(${bp[key][0]},${bp[key][1]},${bp[key][2]})"></div>
-                    <span>${key}</span>
-                </div>`;
-            }
+    if (viewMode === 'biome') {
+        legend.innerHTML = '<h3>自然群系分布图例</h3>';
+        // 使用实际渲染时采用的本地化变量
+        const bp = {
+            '深海': [20, 30, 80], '海洋': [40, 60, 140], '浅海': [80, 160, 200], '沙滩': [224, 208, 144],
+            '雪地': [250, 250, 250], '高山冻原': [200, 210, 220], '裸岩': [140, 140, 145],
+            '极地冰盖': [232, 244, 248], '苔原': [160, 176, 160], 
+            '泰加林(针叶林)': [46, 91, 50], '寒冷草原': [139, 154, 96], 
+            '落叶阔叶林': [58, 122, 58], '温带雨林': [46, 107, 58], '温带草原': [138, 171, 90], '温带沙漠': [194, 178, 128],
+            '季雨林': [42, 90, 42], '热带雨林': [21, 61, 21], '稀树草原': [168, 176, 80], '热带沙漠': [224, 192, 96]
+        };
+        for (let key in bp) {
+            if (key === '深海' || key === '海洋' || key === '浅海') continue;
+            legend.innerHTML += `<div class="legend-item">
+                <div class="color-box" style="background-color: rgb(${bp[key][0]},${bp[key][1]},${bp[key][2]})"></div>
+                <span>${key}</span>
+            </div>`;
+        }
     } else if (viewMode === 'climate') {
         legend.innerHTML = '<h3>气候分布图例</h3>';
         legend.innerHTML += `<div style="margin-bottom:10px;">
@@ -435,9 +562,10 @@ document.getElementById('generateBtn').addEventListener('click', () => {
     // 使用 setTimeout 使 UI 能够先刷新文字
     setTimeout(() => {
         const nationCount = parseInt(document.getElementById('nationCount').value);
+        const plateCount = parseInt(document.getElementById('plateCount').value);
         const seaLevel = parseInt(document.getElementById('seaLevel').value) / 100;
         
-        generator.generate({ nationCount, seaLevel });
+        generator.generate({ nationCount, plateCount, seaLevel });
         updateNationSelect();
         draw();
         
@@ -447,6 +575,8 @@ document.getElementById('generateBtn').addEventListener('click', () => {
 
 document.getElementById('viewMode').addEventListener('change', () => { draw(); updateLegend(); });
 document.getElementById('showGrid').addEventListener('change', draw);
+document.getElementById('showOceanCurrents').addEventListener('change', draw);
+document.getElementById('showNations').addEventListener('change', draw);
 
 // 绑定导出高清图片逻辑 (兼容移动端的长按保存)
 document.getElementById('exportBtn').addEventListener('click', () => {
@@ -459,118 +589,118 @@ document.getElementById('exportBtn').addEventListener('click', () => {
     // 绘制原地图
     ectx.drawImage(canvas, 0, 0);
     
-        // 绘制图例
-        const viewMode = document.getElementById('viewMode').value;
+    // 绘制图例
+    const viewMode = document.getElementById('viewMode').value;
 
-        // 设置图例标题和需要绘制的项
-        let title = "标准等高线地形图例";
-        if (viewMode === 'political') title = "世界政治版图图例";
-        if (viewMode === 'pure_terrain') title = "大陆地形图例";
-        if (viewMode === 'contour') title = "标准测绘等高线图例";
-        if (viewMode === 'biome') title = "自然群系分布图例";
-        if (viewMode === 'climate') title = "气候分布图例";
+    // 设置图例标题和需要绘制的项
+    let title = "标准等高线地形图例";
+    if (viewMode === 'political') title = "世界政治版图图例";
+    if (viewMode === 'pure_terrain') title = "大陆地形图例";
+    if (viewMode === 'contour') title = "标准测绘等高线图例";
+    if (viewMode === 'biome') title = "自然群系分布图例";
+    if (viewMode === 'climate') title = "气候分布图例";
 
-        let legendItems = [];
-        if (viewMode === 'biome') {
-            const bp = {
-                '雪地': [250, 250, 250], '高山冻原': [200, 210, 220], '裸岩': [140, 140, 145],
-                '极地冰盖': [232, 244, 248], '苔原': [160, 176, 160], 
-                '泰加林(针叶林)': [46, 91, 50], '寒冷草原': [139, 154, 96], 
-                '落叶阔叶林': [58, 122, 58], '温带雨林': [46, 107, 58], '温带草原': [138, 171, 90], '温带沙漠': [194, 178, 128],
-                '季雨林': [42, 90, 42], '热带雨林': [21, 61, 21], '稀树草原': [168, 176, 80], '热带沙漠': [224, 192, 96]
-            };
-            for (let key in bp) {
-                legendItems.push({ name: key, color: `rgb(${bp[key][0]},${bp[key][1]},${bp[key][2]})` });
-            }
-        } else if (viewMode === 'climate') {
-            // Climate is special, requires gradient drawing, not discrete items
-        } else {
-            const names = ['雪线', '高山', '中山', '浅山', '高地', '丘陵', '平原'];
-            for (let i = terrainColors.length - 1; i >= 0; i--) {
-                let tc = terrainColors[i];
-                legendItems.push({ name: names[terrainColors.length - 1 - i], color: `rgb(${tc.r},${tc.g},${tc.b})` });
-            }
-            legendItems.push({ name: '浅海', color: 'rgb(216,240,250)' });
-            legendItems.push({ name: '深海', color: 'rgb(160,210,240)' });
+    let legendItems = [];
+    if (viewMode === 'biome') {
+        const bp = {
+            '雪地': [250, 250, 250], '高山冻原': [200, 210, 220], '裸岩': [140, 140, 145],
+            '极地冰盖': [232, 244, 248], '苔原': [160, 176, 160], 
+            '泰加林(针叶林)': [46, 91, 50], '寒冷草原': [139, 154, 96], 
+            '落叶阔叶林': [58, 122, 58], '温带雨林': [46, 107, 58], '温带草原': [138, 171, 90], '温带沙漠': [194, 178, 128],
+            '季雨林': [42, 90, 42], '热带雨林': [21, 61, 21], '稀树草原': [168, 176, 80], '热带沙漠': [224, 192, 96]
+        };
+        for (let key in bp) {
+            legendItems.push({ name: key, color: `rgb(${bp[key][0]},${bp[key][1]},${bp[key][2]})` });
         }
-
-        // 动态计算背景框高度
-        let boxHeight = 0;
-        let boxWidth = 210;
-        if (viewMode === 'climate') {
-            boxHeight = 120; // 只要两行渐变条
-        } else {
-            boxHeight = 40 + legendItems.length * 25; // 标题高度 + 每项25像素
-            // 如果是 biome 项多，可以双列显示
-            if (legendItems.length > 10) boxWidth = 300; 
+    } else if (viewMode === 'climate') {
+        // Climate is special, requires gradient drawing, not discrete items
+    } else {
+        const names = ['雪线', '高山', '中山', '浅山', '高地', '丘陵', '平原'];
+        for (let i = terrainColors.length - 1; i >= 0; i--) {
+            let tc = terrainColors[i];
+            legendItems.push({ name: names[terrainColors.length - 1 - i], color: `rgb(${tc.r},${tc.g},${tc.b})` });
         }
+        legendItems.push({ name: '浅海', color: 'rgb(216,240,250)' });
+        legendItems.push({ name: '深海', color: 'rgb(160,210,240)' });
+    }
 
-        // 图例背景框
-        ectx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-        ectx.shadowColor = 'rgba(0,0,0,0.3)';
-        ectx.shadowBlur = 10;
-        let startY = exportCanvas.height - boxHeight - 20;
-        ectx.fillRect(20, startY, boxWidth, boxHeight);
-        ectx.shadowBlur = 0;
+    // 动态计算背景框高度
+    let boxHeight = 0;
+    let boxWidth = 210;
+    if (viewMode === 'climate') {
+        boxHeight = 120; // 只要两行渐变条
+    } else {
+        boxHeight = 40 + legendItems.length * 25; // 标题高度 + 每项25像素
+        // 如果是 biome 项多，可以双列显示
+        if (legendItems.length > 10) boxWidth = 300; 
+    }
 
-        // 图例标题
+    // 图例背景框
+    ectx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    ectx.shadowColor = 'rgba(0,0,0,0.3)';
+    ectx.shadowBlur = 10;
+    let startY = exportCanvas.height - boxHeight - 20;
+    ectx.fillRect(20, startY, boxWidth, boxHeight);
+    ectx.shadowBlur = 0;
+
+    // 图例标题
+    ectx.fillStyle = '#333';
+    ectx.font = 'bold 20px sans-serif';
+    ectx.textAlign = 'left';
+    ectx.fillText(title, 35, startY + 30);
+
+    // 绘制图例内容
+    ectx.font = '16px sans-serif';
+    if (viewMode === 'climate') {
+        // 温度条
+        ectx.fillText('温度 (冷 → 暖)', 35, startY + 60);
+        let gradT = ectx.createLinearGradient(35, 0, 185, 0);
+        gradT.addColorStop(0, '#0000ff'); gradT.addColorStop(1, '#ff0000');
+        ectx.fillStyle = gradT;
+        ectx.fillRect(35, startY + 70, 150, 10);
+        ectx.strokeStyle = '#555'; ectx.strokeRect(35, startY + 70, 150, 10);
+
+        // 湿度条
         ectx.fillStyle = '#333';
-        ectx.font = 'bold 20px sans-serif';
-        ectx.textAlign = 'left';
-        ectx.fillText(title, 35, startY + 30);
-
-        // 绘制图例内容
-        ectx.font = '16px sans-serif';
-        if (viewMode === 'climate') {
-            // 温度条
-            ectx.fillText('温度 (冷 → 暖)', 35, startY + 60);
-            let gradT = ectx.createLinearGradient(35, 0, 185, 0);
-            gradT.addColorStop(0, '#0000ff'); gradT.addColorStop(1, '#ff0000');
-            ectx.fillStyle = gradT;
-            ectx.fillRect(35, startY + 70, 150, 10);
-            ectx.strokeStyle = '#555'; ectx.strokeRect(35, startY + 70, 150, 10);
-
-            // 湿度条
-            ectx.fillStyle = '#333';
-            ectx.fillText('湿度 (干 → 湿)', 35, startY + 100);
-            let gradM = ectx.createLinearGradient(35, 0, 185, 0);
-            gradM.addColorStop(0, '#ffff00'); gradM.addColorStop(1, '#00ff00');
-            ectx.fillStyle = gradM;
-            ectx.fillRect(35, startY + 110, 150, 10);
-            ectx.strokeRect(35, startY + 110, 150, 10);
-        } else {
-            let yOffset = startY + 50;
-            let xOffset = 35;
-            for (let i = 0; i < legendItems.length; i++) {
-                if (viewMode === 'biome' && i === Math.ceil(legendItems.length / 2)) {
-                    // 折行第二列
-                    xOffset += 140;
-                    yOffset = startY + 50;
-                }
-                let item = legendItems[i];
-                ectx.fillStyle = item.color;
-                ectx.fillRect(xOffset, yOffset, 25, 18);
-                ectx.fillStyle = '#333';
-                ectx.fillText(item.name, xOffset + 35, yOffset + 14);
-                yOffset += 25;
+        ectx.fillText('湿度 (干 → 湿)', 35, startY + 100);
+        let gradM = ectx.createLinearGradient(35, 0, 185, 0);
+        gradM.addColorStop(0, '#ffff00'); gradM.addColorStop(1, '#00ff00');
+        ectx.fillStyle = gradM;
+        ectx.fillRect(35, startY + 110, 150, 10);
+        ectx.strokeRect(35, startY + 110, 150, 10);
+    } else {
+        let yOffset = startY + 50;
+        let xOffset = 35;
+        for (let i = 0; i < legendItems.length; i++) {
+            if (viewMode === 'biome' && i === Math.ceil(legendItems.length / 2)) {
+                // 折行第二列
+                xOffset += 140;
+                yOffset = startY + 50;
             }
+            let item = legendItems[i];
+            ectx.fillStyle = item.color;
+            ectx.fillRect(xOffset, yOffset, 25, 18);
+            ectx.fillStyle = '#333';
+            ectx.fillText(item.name, xOffset + 35, yOffset + 14);
+            yOffset += 25;
         }
+    }
 
     const dataURL = exportCanvas.toDataURL('image/png');
     document.getElementById('exportedImg').src = dataURL;
     document.getElementById('exportModal').style.display = 'block';
 });
 
-    document.getElementById('closeModal').addEventListener('click', () => {
-        document.getElementById('exportModal').style.display = 'none';
-    });
+document.getElementById('closeModal').addEventListener('click', () => {
+    document.getElementById('exportModal').style.display = 'none';
+});
 
-    document.getElementById('directDownloadBtn').addEventListener('click', () => {
-        const link = document.createElement('a');
-        link.download = `fantasy_map_${Date.now()}.png`;
-        link.href = document.getElementById('exportedImg').src;
-        link.click();
-    });
+document.getElementById('directDownloadBtn').addEventListener('click', () => {
+    const link = document.createElement('a');
+    link.download = `fantasy_map_${Date.now()}.png`;
+    link.href = document.getElementById('exportedImg').src;
+    link.click();
+});
 
 // 全屏和强制横屏 (在用户交互时触发)
 document.getElementById('map-container').addEventListener('click', () => {
@@ -614,28 +744,29 @@ function init3D() {
     renderer.domElement.style.left = '0';
     renderer.domElement.style.width = '100%';
     renderer.domElement.style.height = '100%';
-        // 我们在后面重新声明 geometry，所以这里先删掉原有的定义
+    // 我们在后面重新声明 geometry，所以这里先删掉原有的定义
 
-        // 关键：将 2D 画布作为纹理贴图！
-        const texture = new THREE.CanvasTexture(textureCanvas);
-        texture.anisotropy = renderer.capabilities.getMaxAnisotropy(); // 提高纹理清晰度
+    // 关键：将 2D 画布作为纹理贴图！
+    const texture = new THREE.CanvasTexture(textureCanvas);
+    texture.anisotropy = renderer.capabilities.getMaxAnisotropy(); // 提高纹理清晰度
 
-        // 设置 colorSpace 确保颜色正常
-        texture.colorSpace = THREE.SRGBColorSpace;
-        // 这才是最无副作用的贴图翻转方法，在原 Canvas 像素被送进 GPU 渲染前水平翻转
-        texture.wrapS = THREE.RepeatWrapping;
-        texture.repeat.x = -1;
+    // 设置 colorSpace 确保颜色正常
+    texture.colorSpace = THREE.SRGBColorSpace;
+    // 这才是最无副作用的贴图翻转方法，在原 Canvas 像素被送进 GPU 渲染前水平翻转
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.repeat.x = -1;
+    // 动态生成粗糙度贴图 (Roughness Map)，用于区分海洋(光滑反光)和陆地(粗糙哑光)
+    const roughnessCanvas = document.createElement('canvas');
+    roughnessCanvas.width = width; roughnessCanvas.height = height;
+    const rCtx = roughnessCanvas.getContext('2d');
+    let rImgData = rCtx.createImageData(width, height);
+    for (let i = 0; i < width * height; i++) {
+        let c = generator.cells[i];
+        // 海洋区域赋予极高的粗糙度，完全去掉 3D 反光，使其扁平化
 
-        // 动态生成粗糙度贴图 (Roughness Map)，用于区分海洋(光滑反光)和陆地(粗糙哑光)
-        const roughnessCanvas = document.createElement('canvas');
-        roughnessCanvas.width = width; roughnessCanvas.height = height;
-        const rCtx = roughnessCanvas.getContext('2d');
-        let rImgData = rCtx.createImageData(width, height);
-        for (let i = 0; i < width * height; i++) {
-            let c = generator.cells[i];
-            // 海洋区域赋予极低的粗糙度 (如 0.1, 黑色/深灰)，使之像水面一样反射高光
-            // 陆地区域赋予极高的粗糙度 (如 0.95, 白色/浅灰)，让其呈现哑光的自然地貌感
-            let roughnessVal = c.e < generator.seaLevel ? 25 : 240; 
+        // 陆地区域也赋予极高
+            // 陆地区域也赋予极高的粗糙度，呈现哑光的自然地貌感
+            let roughnessVal = c.e < generator.seaLevel ? 255 : 240;
             rImgData.data[i*4] = roughnessVal;
             rImgData.data[i*4+1] = roughnessVal;
             rImgData.data[i*4+2] = roughnessVal;
@@ -770,100 +901,28 @@ function updateNationSelect() {
         }
 }
 
-document.getElementById('editMode').addEventListener('change', (e) => {
-    document.getElementById('editControls').style.display = e.target.checked ? 'block' : 'none';
+document.getElementById('editMode')?.addEventListener('change', (e) => {
+    const ec = document.getElementById('editControls');
+    if (ec) ec.style.display = e.target.checked ? 'block' : 'none';
 });
 
-document.getElementById('editTool').addEventListener('change', (e) => {
+document.getElementById('editTool')?.addEventListener('change', (e) => {
     let tool = e.target.value;
-    document.getElementById('nationSelectControl').style.display = tool === 'nation' ? 'block' : 'none';
-    document.getElementById('brushSizeControl').style.display = (tool === 'raise' || tool === 'lower' || tool === 'nation') ? 'block' : 'none';
-    document.getElementById('lassoControls').style.display = tool === 'lasso' ? 'block' : 'none';
+    const nsc = document.getElementById('nationSelectControl');
+    if (nsc) nsc.style.display = tool === 'nation' ? 'block' : 'none';
+    const bsc = document.getElementById('brushSizeControl');
+    if (bsc) bsc.style.display = (tool === 'raise' || tool === 'lower' || tool === 'nation') ? 'block' : 'none';
+    const lc = document.getElementById('lassoControls');
+    if (lc) lc.style.display = tool === 'lasso' ? 'block' : 'none';
     
-    // 如果选择了建城模式，隐藏画笔强度
-    let isCity = tool === 'city';
-    document.getElementById('brushStrength').parentElement.style.display = isCity || tool === 'lasso' ? 'none' : 'block';
+    const bs = document.getElementById('brushStrength');
+    if (bs && bs.parentElement) bs.parentElement.style.display = tool === 'lasso' ? 'none' : 'block';
     
     // 如果切出了圈选工具，清空选区
     if (tool !== 'lasso') {
         lassoPoints = [];
         draw();
     }
-});
-
-// 初始化城市生成器及模态框事件
-window.addEventListener('DOMContentLoaded', () => {
-    window.cityGen = new CityGenerator('cityCanvas');
-
-    // 绑定独立建城按钮
-    document.getElementById('btnDirectCity').addEventListener('click', () => {
-        // 自动勾选“开启画笔编辑”
-        let editCheckbox = document.getElementById('editMode');
-        if (!editCheckbox.checked) {
-            editCheckbox.click();
-        }
-        
-        // 由于我们将 editTool 的 city 删除了，我们用一个全局状态标识进入独立建城模式
-        window.isDirectCityMode = true;
-        
-        // 变色提示
-        const btn = document.getElementById('btnDirectCity');
-        const oldText = '🏙️ 快速建立城市';
-        btn.style.background = '#e74c3c';
-        btn.innerText = '请在地图上点击...';
-        
-        // 鼠标变十字
-        document.getElementById('mapCanvas').style.cursor = 'crosshair';
-        
-        // 5秒后自动重置状态
-        if (window.cityTimeout) clearTimeout(window.cityTimeout);
-        window.cityTimeout = setTimeout(() => {
-            if (window.isDirectCityMode) {
-                btn.style.background = '#9b59b6';
-                btn.innerText = oldText;
-                window.isDirectCityMode = false;
-                document.getElementById('mapCanvas').style.cursor = 'default';
-            }
-        }, 5000);
-    });
-
-    document.getElementById('closeCityModal').addEventListener('click', () => {
-        document.getElementById('cityModal').style.display = 'none';
-    });
-    
-    document.getElementById('btnRegenerateCity').addEventListener('click', () => {
-        if (!window.lastCityPos) return;
-
-        cityGen.updateParams({
-            seaLevel: parseFloat(document.getElementById('citySeaLevel').value),
-            comZone: parseFloat(document.getElementById('cityComZone').value),
-            roadDensity: parseInt(document.getElementById('cityRoadDens').value)
-        });
-
-        cityGen.generate(window.lastCityPos.x, window.lastCityPos.y);
-    });
-
-    document.getElementById('btnDownloadCity').addEventListener('click', () => {
-        const cityCanvas = document.getElementById('cityCanvas');
-        const link = document.createElement('a');
-        link.download = `city_map_${Date.now()}.png`;
-        link.href = cityCanvas.toDataURL('image/png');
-        link.click();
-    });
-
-    document.querySelectorAll('input[name="cityViewMode"]').forEach(radio => {
-        radio.addEventListener('change', (e) => {
-            if (!window.lastCityPos) return; // 还没生成
-            cityGen.renderFinal();
-        });
-    });
-    
-    document.querySelectorAll('input[name="cityStyleMode"]').forEach(radio => {
-        radio.addEventListener('change', (e) => {
-            if (!window.lastCityPos) return; // 还没生成
-            cityGen.renderFinal();
-        });
-    });
 });
 
 // 射线法判断点是否在多边形内部
@@ -1016,13 +1075,13 @@ function executeLassoAction(actionType) {
     draw();
 }
 
-document.getElementById('btnLassoRaise').addEventListener('click', () => executeLassoAction('raise'));
-document.getElementById('btnLassoLower').addEventListener('click', () => executeLassoAction('lower'));
-document.getElementById('btnLassoRandom').addEventListener('click', () => executeLassoAction('random'));
-document.getElementById('btnLassoMountain').addEventListener('click', () => executeLassoAction('mountain'));
-document.getElementById('btnLassoClear').addEventListener('click', () => { lassoPoints = []; draw(); });
+document.getElementById('btnLassoRaise')?.addEventListener('click', () => executeLassoAction('raise'));
+document.getElementById('btnLassoLower')?.addEventListener('click', () => executeLassoAction('lower'));
+document.getElementById('btnLassoRandom')?.addEventListener('click', () => executeLassoAction('random'));
+document.getElementById('btnLassoMountain')?.addEventListener('click', () => executeLassoAction('mountain'));
+document.getElementById('btnLassoClear')?.addEventListener('click', () => { lassoPoints = []; draw(); });
 
-document.getElementById('exportDataBtn').addEventListener('click', () => {
+document.getElementById('exportDataBtn')?.addEventListener('click', () => {
     const data = generator.exportData();
     const jsonStr = JSON.stringify(data);
     const blob = new Blob([jsonStr], { type: "application/json" });
@@ -1034,11 +1093,11 @@ document.getElementById('exportDataBtn').addEventListener('click', () => {
     URL.revokeObjectURL(url);
 });
 
-document.getElementById('importDataBtn').addEventListener('click', () => {
-    document.getElementById('importFileInput').click();
+document.getElementById('importDataBtn')?.addEventListener('click', () => {
+    document.getElementById('importFileInput')?.click();
 });
 
-document.getElementById('importFileInput').addEventListener('change', (e) => {
+document.getElementById('importFileInput')?.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
@@ -1083,37 +1142,13 @@ let lastMousePos = null;
 
 function handleStart(e) {
     if (is3DMode) return;
+    const editModeEl = document.getElementById('editMode');
+    if (!editModeEl) return;
     lastMousePos = getMousePos(canvas, e);
-    
-    let currentTool = document.getElementById('editTool') ? document.getElementById('editTool').value : null;
-    
-    // 如果是独立建城模式，则弹窗并演算，不进行绘画
-    if (window.isDirectCityMode) {
-        isPainting = false;
-        window.isDirectCityMode = false; // 消费掉这次点击
-        
-        // 恢复按钮状态
-        const btn = document.getElementById('btnDirectCity');
-        btn.style.background = '#9b59b6';
-        btn.innerText = '🏙️ 快速建立城市';
-        document.getElementById('mapCanvas').style.cursor = 'default';
-        
-        document.getElementById('cityModal').style.display = 'flex';
-        // 记录点击在大地图上的百分比坐标，传给城市生成器作为局部高频采样的基准
-        window.lastCityPos = {
-            x: lastMousePos.x / width,
-            y: lastMousePos.y / height
-        };
-        // 读取主地图海平面初始值
-        document.getElementById('citySeaLevel').value = generator.seaLevel;
-        // 修复部分设备可能出现的渲染卡顿，稍微延时执行渲染
-        setTimeout(() => {
-            document.getElementById('btnRegenerateCity').click();
-        }, 100);
-        return;
-    }
 
-    if (!document.getElementById('editMode').checked) {
+    let currentTool = document.getElementById('editTool') ? document.getElementById('editTool').value : null;
+
+    if (!editModeEl.checked) {
         // 如果未开启画笔模式（普通浏览模式），点击领土时弹出修改国家名称窗口
         let idx = generator.idx(lastMousePos.x, lastMousePos.y);
         let cell = generator.cells[idx];
@@ -1147,8 +1182,10 @@ let paintTicking = false;
 let lastPaintEvent = null;
 
 function handleMove(e) {
-    let currentTool = document.getElementById('editTool').value;
-    if (isPainting && currentTool !== 'city') {
+    const editToolEl = document.getElementById('editTool');
+    if (!editToolEl) return;
+    let currentTool = editToolEl.value;
+    if (isPainting) {
         lastPaintEvent = e;
         if (!paintTicking) {
             requestAnimationFrame(() => {
@@ -1192,15 +1229,15 @@ function drawLassoOverlay() {
 function handleEnd() {
     if (isPainting) {
         isPainting = false;
-        
+
         // 领土被编辑后，清除国家名称的渲染缓存以重新计算文字排版和字号
         if (generator && generator.nations) {
             generator.nations.forEach(n => n.renderData = null);
         }
         updateNationSelect();
         
-        // 如果是画笔模式，抬起时才全局更新恢复河流。如果是圈选模式，保留红色线框
-        if (document.getElementById('editTool').value !== 'lasso') {
+        const et = document.getElementById('editTool');
+        if (!et || et.value !== 'lasso') {
             draw();
         } else {
             drawLassoOverlay();
@@ -1214,20 +1251,27 @@ window.addEventListener('mouseup', handleEnd);
 
 // 移动端触摸防抖处理
 canvas.addEventListener('touchstart', (e) => { 
-    if (document.getElementById('editMode').checked && !is3DMode) e.preventDefault(); 
+    const em = document.getElementById('editMode');
+    if (em && em.checked && !is3DMode) e.preventDefault(); 
     handleStart(e); 
 }, {passive: false});
 canvas.addEventListener('touchmove', (e) => { 
-    if (document.getElementById('editMode').checked && !is3DMode) e.preventDefault(); 
+    const em = document.getElementById('editMode');
+    if (em && em.checked && !is3DMode) e.preventDefault(); 
     handleMove(e); 
 }, {passive: false});
 window.addEventListener('touchend', handleEnd);
 
 function applyPaintLine(startPos, endPos) {
-    const tool = document.getElementById('editTool').value;
-    const brushSize = parseInt(document.getElementById('brushSize').value);
-    const brushStrength = parseFloat(document.getElementById('brushStrength').value);
-    const selectedNation = parseInt(document.getElementById('brushNation').value);
+    const editToolEl = document.getElementById('editTool');
+    if (!editToolEl) return;
+    const tool = editToolEl.value;
+    const brushSizeEl = document.getElementById('brushSize');
+    const brushSize = brushSizeEl ? parseInt(brushSizeEl.value) : 10;
+    const brushStrengthEl = document.getElementById('brushStrength');
+    const brushStrength = brushStrengthEl ? parseFloat(brushStrengthEl.value) : 0.5;
+    const brushNationEl = document.getElementById('brushNation');
+    const selectedNation = brushNationEl ? parseInt(brushNationEl.value) : -1;
     
     let changedCells = [];
     let checkedMap = new Set();
@@ -1356,12 +1400,13 @@ function applyPaintLine(startPos, endPos) {
                 
                 // 1. 基础海拔上色
                 if (c.e < generator.seaLevel) {
-                    let depth = (generator.seaLevel - c.e) / Math.max(0.01, generator.seaLevel);
-                    depth = Math.max(0, Math.min(1.0, depth)); 
-                    r = 216 - depth * 56;
-                    g = 240 - depth * 30;
-                    b = 250 - depth * 10;
-                } else {
+                // 深邃蓝色海洋，高饱和扁平化质感
+                let depth = (generator.seaLevel - c.e) / Math.max(0.01, generator.seaLevel);
+                depth = Math.max(0, Math.min(1.0, depth));
+                r = 10 - depth * 5;
+                g = 55 - depth * 15;
+                b = 100 - depth * 20;
+            } else {
                     let landE = (c.e - generator.seaLevel) / (1.0 - generator.seaLevel);
                     for (let tc of terrainColors) {
                         if (landE <= tc.limit) { r = tc.r; g = tc.g; b = tc.b; break; }
@@ -1379,17 +1424,17 @@ function applyPaintLine(startPos, endPos) {
                         b = 250 * (1 - t) + b * t;
                     }
                     
-                    // 2. 地形浮雕光照
-                    if (viewMode !== 'contour' && cx > 0 && cy > 0) {
-                        let leftE = generator.cells[idx - 1].e;
-                        let topE = generator.cells[idx - width].e;
-                        let dxE = c.e - leftE;
-                        let dyE = c.e - topE;
-                        let lightMod = Math.max(0.4, Math.min(1.8, 1.0 + (dxE + dyE) * 12));
-                        r = Math.min(255, r * lightMod);
-                        g = Math.min(255, g * lightMod);
-                        b = Math.min(255, b * lightMod);
-                    }
+                    // 2. 地形浮雕光照 - 仅限陆地，强化阴影
+            if (viewMode !== 'contour' && cx > 0 && cy > 0 && c.e >= generator.seaLevel) {
+                let leftE = generator.cells[idx - 1].e;
+                let topE = generator.cells[idx - width].e;
+                let dxE = c.e - leftE;
+                let dyE = c.e - topE;
+                let lightMod = Math.max(0.2, Math.min(1.8, 1.0 + (dxE + dyE) * 20));
+                r = Math.min(255, r * lightMod);
+                g = Math.min(255, g * lightMod);
+                b = Math.min(255, b * lightMod);
+            }
                 }
                 
                 // 3. 渲染湖泊
@@ -1398,20 +1443,20 @@ function applyPaintLine(startPos, endPos) {
                 }
                 
                 // 4. 国家与边界混色
-                if (c.nation !== -1 && c.e >= generator.seaLevel && viewMode !== 'pure_terrain' && viewMode !== 'contour' && !c.isLake) {
-                    let nColor = generator.nations[c.nation].rgb;
-                    if (viewMode === 'political') {
-                        r = r * 0.15 + nColor.r * 0.85;
-                        g = g * 0.15 + nColor.g * 0.85;
-                        b = b * 0.15 + nColor.b * 0.85;
-                        if (c.border) { r = 90; g = 70; b = 110; }
-                    } else {
-                        r = r * 0.90 + nColor.r * 0.10;
-                        g = g * 0.90 + nColor.g * 0.10;
-                        b = b * 0.90 + nColor.b * 0.10;
-                        if (c.border) { r = 138; g = 43; b = 226; }
-                    }
-                }
+    if (document.getElementById('showNations').checked && c.nation !== -1 && c.e >= generator.seaLevel && viewMode !== 'pure_terrain' && viewMode !== 'contour' && !c.isLake) {
+        let nColor = generator.nations[c.nation].rgb;
+        if (viewMode === 'political') {
+            r = r * 0.15 + nColor.r * 0.85;
+            g = g * 0.15 + nColor.g * 0.85;
+            b = b * 0.15 + nColor.b * 0.85;
+            if (c.border) { r = 90; g = 70; b = 110; }
+        } else {
+            r = r * 0.90 + nColor.r * 0.10;
+            g = g * 0.90 + nColor.g * 0.10;
+            b = b * 0.90 + nColor.b * 0.10;
+            if (c.border) { r = 138; g = 43; b = 226; }
+        }
+    }
                 
                 // 5. 立即更新这一个像素！(直接创建单像素 ImageData，无需重构整张图)
                 let pixel = ctx.createImageData(1, 1);
