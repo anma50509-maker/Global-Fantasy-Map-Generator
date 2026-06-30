@@ -191,50 +191,185 @@ class MapGenerator {
                 }
                 
                 // 基础水汽源自海洋，陆地初始极其干燥，除非被雨带覆盖
-                mArray[idx] = e <= this.seaLevel ? 1.0 : 0.05; 
-                
-                this.cells[idx] = { x, y, e, m: 0, temp: Math.max(0, Math.min(1, baseTemp)), nation: -1, border: false, waterFlow: 0, isRiver: false, isLake: false };
+            mArray[idx] = e <= this.seaLevel ? 1.0 : 0.05;
+            
+            this.cells[idx] = { x, y, e, m: 0, temp: Math.max(0, Math.min(1, baseTemp)), nation: -1, border: false, waterFlow: 0, isRiver: false, isLake: false, current: {u:0, v:0} };
+        }
+    }
+
+    // C2. 行星风带与基于边界感知的洋流环流生成 (Gyres Model)
+    // 预计算东西向距离陆地的距离，用于形成西边界流和东边界流
+    let distW = new Int32Array(this.width * this.height).fill(999);
+    let distE = new Int32Array(this.width * this.height).fill(999);
+    
+    for (let y = 0; y < this.height; y++) {
+        let lastLandX = -1;
+        for (let loop = 0; loop < 2; loop++) {
+            for (let x = 0; x < this.width; x++) {
+                let idx = this.idx(x, y);
+                if (this.cells[idx].e > this.seaLevel) lastLandX = x;
+                else if (loop === 1 && lastLandX !== -1) {
+                    let d = x - lastLandX;
+                    if (d < 0) d += this.width;
+                    distW[idx] = d;
+                }
             }
         }
+        lastLandX = -1;
+        for (let loop = 0; loop < 2; loop++) {
+            for (let x = this.width - 1; x >= 0; x--) {
+                let idx = this.idx(x, y);
+                if (this.cells[idx].e > this.seaLevel) lastLandX = x;
+                else if (loop === 1 && lastLandX !== -1) {
+                    let d = lastLandX - x;
+                    if (d < 0) d += this.width;
+                    distE[idx] = d;
+                }
+            }
+        }
+    }
 
-        // C2. 行星风带与洋流引发的温湿度扰动模拟
-        // 在地球上，风带动洋流。赤道到纬度30度刮信风（东风），30度到60度刮西风。
-        for (let y = 0; y < this.height; y++) {
-            let lat = (y / this.height) - 0.5; // -0.5 到 0.5
-            let absLat = Math.abs(lat * 2);    // 0 到 1
+    let rawU = new Float32Array(this.width * this.height);
+    let rawV = new Float32Array(this.width * this.height);
+
+    for (let y = 0; y < this.height; y++) {
+        let lat = (y / this.height) - 0.5;
+        let absLat = Math.abs(lat * 2);
+        
+        let inTropics = absLat < 0.33;
+        let windDirX = inTropics ? -1 : 1;
+        let latSign = lat >= 0 ? 1 : -1;
+
+        for (let x = 0; x < this.width; x++) {
+            let idx = this.idx(x, y);
+            let c = this.cells[idx];
+            if (c.e > this.seaLevel) continue;
             
-            // 判断当前纬度的盛行风向 (1 为向东吹，-1 为向西吹)
-            // 赤道(0-0.33)东风带，中纬度(0.33-0.66)西风带，极地(0.66-1.0)东风带
-            let windDirX = 0;
-            if (absLat < 0.33) windDirX = -1;
-            else if (absLat < 0.66) windDirX = 1;
-            else windDirX = -1;
+            let dE = distE[idx];
+            let dW = distW[idx];
+            
+            let u = windDirX;
+            let v = 0;
+            
+            let BL = 18; // 边界层厚度
+            
+            if (inTropics) {
+                if (dW < BL) {
+                    let factor = (BL - dW) / BL;
+                    u *= (1 - factor);
+                    v = latSign * factor;
+                } else if (dE < BL) {
+                    let factor = (BL - dE) / BL;
+                    u *= (1 - factor * 0.3);
+                    v = -latSign * factor * 0.3;
+                }
+            } else {
+                if (dE < BL) {
+                    let factor = (BL - dE) / BL;
+                    u *= (1 - factor);
+                    v = -latSign * factor;
+                } else if (dW < BL) {
+                    let factor = (BL - dW) / BL;
+                    u *= (1 - factor * 0.3);
+                    v = latSign * factor * 0.3;
+                }
+            }
+            
+            // 纬度过渡带，强制经向汇合形成闭环
+            if (absLat >= 0.22 && absLat <= 0.44) {
+                let transFactor = 1.0 - Math.abs(absLat - 0.33) / 0.11; // 0.33处最强
+                if (dW < BL * 2) {
+                    let factor = (BL*2 - dW) / (BL*2);
+                    v += latSign * factor * transFactor * 1.5;
+                }
+                if (dE < BL * 2) {
+                    let factor = (BL*2 - dE) / (BL*2);
+                    v -= latSign * factor * transFactor * 1.5;
+                }
+            }
+            
+            rawU[idx] = u;
+            rawV[idx] = v;
+        }
+    }
 
-            // 模拟风系和洋流吹拂陆地带来的水汽和温度变化
-            for (let loop = 0; loop < 2; loop++) { // 东西双向扫描处理风包裹
-                for (let xi = 0; xi < this.width; xi++) {
-                    let x = windDirX > 0 ? xi : (this.width - 1 - xi);
-                    let idx = this.idx(x, y);
-                    let c = this.cells[idx];
-                    
-                    // 寻找风吹来的上游相邻节点
-                    let upX = x - windDirX;
-                    if (upX < 0) upX += this.width;
-                    if (upX >= this.width) upX -= this.width;
-                    let upIdx = this.idx(upX, y);
-                    let upC = this.cells[upIdx];
-
-                    // 1. 洋流效应：如果风把海洋的水吹向大陆（即上游是海，当前也是海或刚登岸）
-                    // 在东风带（低纬度），大陆东岸受到暖流影响，增温增湿。
-                    // 在西风带（中纬度），大陆西岸受到暖流影响，增温增湿。
-                    if (upC.e <= this.seaLevel) {
-                        mArray[idx] = Math.min(1.0, mArray[idx] + 0.15); // 海风带来大量水汽
-                        // 海洋作为恒温器，让风吹拂过的地方温度趋向中和
-                        c.temp = c.temp * 0.9 + upC.temp * 0.1; 
+    // 向量场拉普拉斯平滑（4次迭代）让水流完全圆润顺滑
+    for (let iter = 0; iter < 4; iter++) {
+        let nextU = new Float32Array(this.width * this.height);
+        let nextV = new Float32Array(this.width * this.height);
+        for (let y = 1; y < this.height - 1; y++) {
+            for (let x = 0; x < this.width; x++) {
+                let idx = this.idx(x, y);
+                if (this.cells[idx].e > this.seaLevel) continue;
+                
+                let sumU = 0, sumV = 0, count = 0;
+                for(let dy=-1; dy<=1; dy++) {
+                    for(let dx=-1; dx<=1; dx++) {
+                        let nx = x + dx;
+                        if(nx < 0) nx += this.width;
+                        if(nx >= this.width) nx -= this.width;
+                        let ny = y + dy;
+                        let nidx = this.idx(nx, ny);
+                        if (this.cells[nidx].e <= this.seaLevel) {
+                            sumU += rawU[nidx];
+                            sumV += rawV[nidx];
+                            count++;
+                        }
                     }
+                }
+                nextU[idx] = sumU / count;
+                nextV[idx] = sumV / count;
+            }
+        }
+        rawU = nextU;
+        rawV = nextV;
+    }
 
-                    // 2. 地形雨与雨影效应
-                    if (c.e > this.seaLevel) {
+    for (let i = 0; i < this.width * this.height; i++) {
+        if (this.cells[i].e <= this.seaLevel) {
+            let u = rawU[i];
+            let v = rawV[i];
+            let speed = Math.sqrt(u*u + v*v) || 1;
+            this.cells[i].current.u = (u / speed) * 0.5;
+            this.cells[i].current.v = (v / speed) * 0.5;
+        }
+    }
+
+    // C3. 气候温湿度传输与水文风化
+    for (let y = 0; y < this.height; y++) {
+        let lat = (y / this.height) - 0.5;
+        let absLat = Math.abs(lat * 2);
+        let windDirX = (absLat < 0.33 || absLat >= 0.66) ? -1 : 1;
+
+        for (let loop = 0; loop < 2; loop++) { 
+            for (let xi = 0; xi < this.width; xi++) {
+                let x = windDirX > 0 ? xi : (this.width - 1 - xi);
+                let idx = this.idx(x, y);
+                let c = this.cells[idx];
+
+                let upX = x - windDirX;
+                if (upX < 0) upX += this.width;
+                if (upX >= this.width) upX -= this.width;
+                let upIdx = this.idx(upX, y);
+                let upC = this.cells[upIdx];
+
+                // 气候效应：风海结合
+                if (upC.e <= this.seaLevel) {
+                    mArray[idx] = Math.min(1.0, mArray[idx] + 0.15); 
+                    // 这里加入真实洋流对温度的调节
+                    // 暖流导致升温，寒流导致降温（依据洋流带来的是低纬度还是高纬度的水）
+                    let currentTempEffect = 0;
+                    if (c.e <= this.seaLevel) {
+                        let isWarm = c.current.v * lat > 0; // 如果流向两极则是暖流
+                        let isCold = c.current.v * lat < 0; // 流向赤道是寒流
+                        if (isWarm) currentTempEffect = 0.15;
+                        if (isCold) currentTempEffect = -0.15;
+                    }
+                    c.temp = c.temp * 0.85 + (upC.temp + currentTempEffect) * 0.15;
+                }
+
+                // 地形雨与雨影效应
+                if (c.e > this.seaLevel) {
                         let heightDiff = c.e - upC.e;
                         if (heightDiff > 0.05) {
                             // 迎风坡：空气被强迫抬升，水汽凝结，引发大量降水
