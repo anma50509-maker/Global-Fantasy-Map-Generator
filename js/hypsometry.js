@@ -55,7 +55,7 @@
     landCurve: LAND_CURVE,
     seaCurve: SEA_CURVE,
     /** 分位 → 陆地相对高度 */
-    rel: (r) => interp(LAND_CURVE, r, 1),
+    rel: (r) => Math.pow(interp(LAND_CURVE, r, 1), 0.85),
     /** 分位 → 海底深度（正数） */
     sea: (r) => interp(SEA_CURVE, r, 1.6),
   };
