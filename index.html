@@ -2,39 +2,51 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>架空地图生成器</title>
+    <link rel="icon" href="data:,">
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-    <div id="ui">
+    <aside id="ui">
         <h2>架空地图生成器</h2>
+
         <button id="generateBtn">生成新地图</button>
-        <button id="toggle3DBtn" style="background-color: #3498db;">进入 3D 视图</button>
-<button id="exportBtn" style="background-color: #27ae60;">导出高清图片</button>
-
-<div id="legendContainer" style="margin-top: 10px; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 5px; font-size: 12px; display: none;">
-    <div id="legendTitle" style="font-weight: bold; margin-bottom: 5px; color: #fff;">图例</div>
-    <div id="legendContent" style="display: flex; flex-wrap: wrap; gap: 5px;"></div>
-</div>
-
-        <div class="control">
-            <label>国家数量: <input type="number" id="nationCount" value="12" min="0" max="50"></label>
+        <div id="progressWrap">
+            <div id="progressBar"><div id="progressFill"></div></div>
+            <div id="progressText"></div>
         </div>
+
+        <button id="toggle3DBtn">进入 3D 视图</button>
+        <div class="control" id="cloudToggleWrap" style="display: none;">
+            <label>显示云层: <input type="checkbox" id="showClouds" checked></label>
+        </div>
+        <button id="exportBtn" class="green">导出高清图片</button>
+
         <div class="control">
             <label>板块数量: <input type="number" id="plateCount" value="6" min="2" max="20"></label>
         </div>
         <div class="control">
-            <label>海平面高度: <input type="range" id="seaLevel" value="70" min="50" max="90">%</label>
+            <label>海洋占比: <input type="range" id="seaLevel" value="70" min="50" max="90"> <span id="seaLevelVal">70%</span></label>
         </div>
         <div class="control">
-            <label>显示模式: 
+            <label>显示模式:
                 <select id="viewMode">
-                    <option value="terrain">地形混合</option>
-                    <option value="political">政治地图</option>
-                    <option value="pure_terrain">纯地形</option>
+                    <option value="satellite" selected>卫星地图（群系 × 地形）</option>
+                    <option value="pure_terrain">纯地形（海拔色带）</option>
                     <option value="contour">纯等高线</option>
                     <option value="climate">气候热力图</option>
                     <option value="biome">自然群系分布图</option>
+                    <option value="handdrawn">手绘古地图</option>
+                </select>
+            </label>
+        </div>
+        <div class="control">
+            <label>地图投影:
+                <select id="projection">
+                    <option value="equirect">等距圆柱（2:1 传统）</option>
+                    <option value="robinson" selected>罗宾逊（极点收拢）</option>
+                    <option value="mollweide">摩尔威德（等面积椭圆）</option>
                 </select>
             </label>
         </div>
@@ -45,37 +57,96 @@
             <label>显示洋流系统: <input type="checkbox" id="showOceanCurrents"></label>
         </div>
         <div class="control">
-            <label>显示国家与边界: <input type="checkbox" id="showNations" checked></label>
+            <label>显示季风系统: <input type="checkbox" id="showMonsoon"></label>
         </div>
 
-        <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-            <button id="importDataBtn" style="background-color: #d35400; padding: 10px; font-size: 14px; margin-bottom: 0;">导入配置</button>
-            <button id="exportDataBtn" style="background-color: #8e44ad; padding: 10px; font-size: 14px; margin-bottom: 0;">导出配置</button>
-            <input type="file" id="importFileInput" accept=".json" style="display: none;">
+
+        <hr>
+
+        <h3>编辑</h3>
+        <div class="control">
+            <label>开启地图编辑: <input type="checkbox" id="editMode"></label>
         </div>
-        <div class="legend" id="legend"></div>
-    </div>
+
+        <div id="editPanel">
+            <p class="hint">1. 在地图上按住拖动画一个红圈<br>2. 点下面两个按钮之一，把圈里的地变成大陆或海洋</p>
+
+            <div class="btn-grid">
+                <button id="btnRegionLand">🏔️ 隆起成大陆</button>
+                <button id="btnRegionSea">🌊 沉陷成海洋</button>
+            </div>
+
+            <div class="control">
+                <label>隆起幅度: <input type="range" id="regionStrength" min="0.35" max="1.1" step="0.01" value="0.82"> <span id="regionStrengthVal">0.82</span></label>
+            </div>
+            <div class="control">
+                <label>地貌尺度: <input type="range" id="regionScale" min="0.55" max="1.8" step="0.01" value="1.00"> <span id="regionScaleVal">1.00</span></label>
+            </div>
+            <p class="hint">隆起幅度 = 最高处占「陆地可用高度」的比例（0.82 ≈ 摸到雪线）。地貌尺度大于 1 得到更整块的大陆，小于 1 得到碎岛群。</p>
+
+            <button id="btnRegionClear" class="ghost">清除选区</button>
+
+            <div class="btn-row">
+                <button id="undoBtn" class="ghost">撤销</button>
+                <button id="redoBtn" class="ghost">重做</button>
+            </div>
+            <p class="hint">成形是同步的；海深与河流会自动重算。<kbd>Ctrl+Z</kbd> 撤销，<kbd>Ctrl+Shift+Z</kbd> 重做。</p>
+        </div>
+
+        <div class="btn-row">
+            <button id="importDataBtn" class="warn">导入配置</button>
+            <button id="exportDataBtn" class="purple">导出配置</button>
+        </div>
+        <input type="file" id="importFileInput" accept=".json" style="display: none">
+
+        <div id="legendContainer">
+            <div class="legend-title">图例</div>
+            <div id="legend" class="legend"></div>
+        </div>
+
+        <div id="statusBar" class="status">就绪</div>
+    </aside>
+
     <div id="map-container">
-        <canvas id="mapCanvas"></canvas>
+        <div id="canvas-stack">
+            <canvas id="mapCanvas"></canvas>
+            <canvas id="overlayCanvas"></canvas>
+        </div>
     </div>
 
-    <!-- 导出图片时长按保存的模态框 -->
+    <!-- 导出图片模态框 -->
     <div id="exportModal">
         <div class="modal-content">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div class="modal-head">
                 <span id="closeModal">返回</span>
-                <button id="directDownloadBtn" style="background-color: #27ae60; padding: 10px 20px; font-size: 14px; font-weight: bold; color: white; border: none; border-radius: 5px; cursor: pointer;">直接下载图片</button>
+                <button id="directDownloadBtn">直接下载图片</button>
             </div>
-            <p style="margin: 15px 0; font-size: 14px; font-weight: bold; color: #2ecc71;">电脑端请点击上方“直接下载”，手机端也可长按下方图片保存</p>
+            <p class="modal-tip">电脑端请点击上方「直接下载」，手机端也可长按下方图片保存</p>
             <img id="exportedImg" src="" alt="High Res Map">
         </div>
     </div>
 
-    <!-- 3D 地球渲染引擎 -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
-    <script src="js/generator.js"></script>
+    <!-- 依赖：three.js 已本地化，3D 视图可离线使用 -->
+    <script src="js/vendor/three.min.js"></script>
+    <script src="js/vendor/OrbitControls.js"></script>
+
+    <!-- 本地依赖 -->
+    <script src="js/vendor/simplex-noise.js"></script>
+
+    <!-- 应用模块 -->
+    <script src="js/projection.js"></script>
+    <script src="js/hypsometry.js"></script>
+    <script src="js/hydrology.js"></script>
+    <script src="js/climate.js"></script>
+    <!-- 地形计算内核（主线程与 Worker 共用，必须先于 map-generator 加载） -->
+    <script src="js/terrain.js"></script>
+    <script src="js/map-generator.js"></script>
+    <script src="js/renderer.js"></script>
+    <!-- 编辑器算子层（terrain-ops 必须先于 editor 加载） -->
+    <script src="js/terrain-ops.js"></script>
+    <script src="js/editor.js"></script>
+    <script src="js/globe.js"></script>
+    <script src="js/storage.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>

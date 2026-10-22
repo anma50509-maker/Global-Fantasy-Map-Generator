@@ -41,3 +41,11 @@ logs/
 # Project specific
 *.tmp
 *.temp
+
+# Operit 自动备份与 IDE 配置
+.backup/
+.operit/
+
+
+# Local assistant memory
+.workbuddy/
