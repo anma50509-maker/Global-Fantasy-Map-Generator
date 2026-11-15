@@ -42,10 +42,15 @@ logs/
 *.tmp
 *.temp
 
-# Operit �Զ������� IDE ����
+# Operit 自动备份与 IDE 配置
 .backup/
 .operit/
 
-
 # Local assistant memory
 .workbuddy/
+
+# 本地工作产物（截图 / 分享包 / 发布临时目录）
+.screenshots/
+shots/
+.trae-html-share-packages/
+.tmp-pub/

@@ -26,6 +26,7 @@
     seaLevel: $('seaLevel'),
     seaLevelVal: $('seaLevelVal'),
     viewMode: $('viewMode'),
+    viewModeHint: $('viewModeHint'),
     projection: $('projection'),
     showGrid: $('showGrid'),
     showOceanCurrents: $('showOceanCurrents'),
@@ -43,6 +44,9 @@
     progressFill: $('progressFill'),
     progressText: $('progressText'),
     statusBar: $('statusBar'),
+    globeHud: $('globeHud'),
+    hudWorldName: $('hudWorldName'),
+    hudModeName: $('hudModeName'),
     editMode: $('editMode'),
     editPanel: $('editPanel'),
     regionStrength: $('regionStrength'),
@@ -91,10 +95,64 @@
   });
 
   renderer.onTextureChange = () => {
-    if (globe.scene) globe.updateTexture();
+    if (!globe.scene) return;
+    // 3D 关闭时不做昂贵的贴图/法线/顶点重建，只记脏；进入 3D 时再同步
+    if (globe.is3D) globe.updateTexture();
+    else globe.markTextureDirty();
   };
 
   let busy = false;
+
+  // ==================== 显示模式文案与 HUD ====================
+
+  /** 三种手绘 / 题名模式共用「纸墨 HUD」皮肤与 3D 暖色光照 */
+  const HAND_MODES = { handdrawn: true, named: true, lettered: true };
+  /** 只有带地名的模式才值得为 HUD 触发一次地名构建 */
+  const NAMED_MODES = { named: true, lettered: true };
+
+  const MODE_HINTS = {
+    satellite: '地形、群系与光照合成的高信息量视图。',
+    pure_terrain: '只看海拔色带，适合判断山系与盆地。',
+    contour: '纯等高线／等深线，像一张测绘底图。',
+    climate: '温度 × 湿度热力图，红暖蓝冷。',
+    biome: '按 Whittaker 矩阵上色的自然群系分布。',
+    handdrawn: '铜版画式手工地图：羊皮纸、排线山体、墨线海岸。',
+    named: '信息主角是地名：羊皮纸水彩底 + 逐字手写地名 + 罗盘/图名。',
+    lettered: '水墨白描底 + 毛笔题字 + 朱印图名 + 比例尺，地名优先的图幅。',
+  };
+
+  function modeLabel(value) {
+    const opts = els.viewMode.options;
+    for (let i = 0; i < opts.length; i++) {
+      if (opts[i].value === value) return opts[i].textContent.replace(/（.*$/, '').trim();
+    }
+    return value;
+  }
+
+  function currentMode() {
+    return renderer.viewMode || 'satellite';
+  }
+
+  /** 3D HUD：图名卡（手绘模式显示世界名）、模式徽标、操作提示 */
+  function updateViewHud() {
+    const mode = currentMode();
+    const hand = !!HAND_MODES[mode];
+    els.mapContainer.classList.toggle('hand-mode', hand);
+    if (els.viewModeHint) els.viewModeHint.textContent = MODE_HINTS[mode] || '';
+    if (els.hudModeName) els.hudModeName.textContent = modeLabel(mode);
+
+    if (els.hudWorldName) {
+      let worldName = '';
+      if (NAMED_MODES[mode] && typeof renderer.getWorldName === 'function') {
+        try {
+          worldName = renderer.getWorldName();
+        } catch (error) {
+          console.warn('[main] 获取世界名失败：', error);
+        }
+      }
+      els.hudWorldName.textContent = worldName || (hand ? '无名之境' : '星球视图');
+    }
+  }
 
   // ==================== 基础状态 ====================
 
@@ -140,6 +198,7 @@
       renderer.updateOceanDepth();
       renderer.render();
       refreshLegend();
+      updateViewHud();
       const seconds = ((performance.now() - t0) / 1000).toFixed(1);
       setStatus(
         '生成完成（' + seconds + ' 秒' +
@@ -165,6 +224,7 @@
     renderer.setViewMode(els.viewMode.value);
     renderer.render();
     refreshLegend();
+    updateViewHud();
   });
 
   const refreshRender = () => {
@@ -184,7 +244,11 @@
     renderer.render();
     setStatus('已切换投影：' + (FM.PROJECTIONS[els.projection.value] || {}).label);
   });
-  els.showGrid.addEventListener('change', refreshRender);
+  els.showGrid.addEventListener('change', () => {
+    refreshRender();
+    // 3D 网格是独立的 3D 线条（不烘焙在贴图里），必须单独同步
+    if (globe.scene) globe.syncGraticule();
+  });
   els.showOceanCurrents.addEventListener('change', refreshRender);
   els.showMonsoon.addEventListener('change', refreshRender);
 
@@ -254,6 +318,9 @@
     els.overlay.style.display = is3D ? 'none' : els.editMode.checked ? 'block' : 'none';
     // 云层开关只在 3D 模式下显示
     els.cloudToggleWrap.style.display = is3D ? 'block' : 'none';
+    // HUD 与容器皮肤：3D / 手绘模式由 CSS 控制
+    els.mapContainer.classList.toggle('is-3d', is3D);
+    updateViewHud();
   }
 
   els.showClouds.addEventListener('change', () => {
@@ -272,6 +339,7 @@
     try {
       const is3D = globe.toggle();
       update3DButton(is3D);
+      if (is3D) globe.syncGraticule();
       setStatus(is3D ? '3D 视图：拖拽旋转，滚轮缩放' : '已返回 2D 视图');
     } catch (error) {
       console.error(error);
@@ -334,6 +402,7 @@
         renderer.updateOceanDepth();
         renderer.render();
         refreshLegend();
+        updateViewHud();
         setStatus(result.message);
       } catch (error) {
         console.error(error);
@@ -352,10 +421,12 @@
   els.overlay.width = WIDTH;
   els.overlay.height = HEIGHT;
   els.overlay.style.display = 'none';
-  updateEditPanels();
+  // 编辑面板初始隐藏（#editPanel 默认 display:none，editMode 变化时再切换）
+  els.editPanel.style.display = 'none';
   els.undoBtn.disabled = true;
   els.redoBtn.disabled = true;
   refreshLegend();
+  updateViewHud();
 
   // 调试 / 自动化测试钩子
   window.__FM_APP__ = {

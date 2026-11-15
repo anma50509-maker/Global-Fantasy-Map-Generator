@@ -67,7 +67,7 @@ async function main() {
   });
 
   const viewTimings = {};
-  for (const mode of ['pure_terrain', 'contour', 'climate', 'biome', 'handdrawn', 'satellite']) {
+  for (const mode of ['pure_terrain', 'contour', 'climate', 'biome', 'handdrawn', 'named', 'lettered', 'satellite']) {
     viewTimings['view:' + mode] = await page.evaluate((m) => {
       const app = window.__FM_APP__;
       const t = performance.now();

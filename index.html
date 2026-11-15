@@ -11,95 +11,109 @@
     <aside id="ui">
         <h2>架空地图生成器</h2>
 
-        <button id="generateBtn">生成新地图</button>
-        <div id="progressWrap">
-            <div id="progressBar"><div id="progressFill"></div></div>
-            <div id="progressText"></div>
-        </div>
-
-        <button id="toggle3DBtn">进入 3D 视图</button>
-        <div class="control" id="cloudToggleWrap" style="display: none;">
-            <label>显示云层: <input type="checkbox" id="showClouds" checked></label>
-        </div>
-        <button id="exportBtn" class="green">导出高清图片</button>
-
-        <div class="control">
-            <label>板块数量: <input type="number" id="plateCount" value="6" min="2" max="20"></label>
-        </div>
-        <div class="control">
-            <label>海洋占比: <input type="range" id="seaLevel" value="70" min="50" max="90"> <span id="seaLevelVal">70%</span></label>
-        </div>
-        <div class="control">
-            <label>显示模式:
-                <select id="viewMode">
-                    <option value="satellite" selected>卫星地图（群系 × 地形）</option>
-                    <option value="pure_terrain">纯地形（海拔色带）</option>
-                    <option value="contour">纯等高线</option>
-                    <option value="climate">气候热力图</option>
-                    <option value="biome">自然群系分布图</option>
-                    <option value="handdrawn">手绘古地图</option>
-                </select>
-            </label>
-        </div>
-        <div class="control">
-            <label>地图投影:
-                <select id="projection">
-                    <option value="equirect">等距圆柱（2:1 传统）</option>
-                    <option value="robinson" selected>罗宾逊（极点收拢）</option>
-                    <option value="mollweide">摩尔威德（等面积椭圆）</option>
-                </select>
-            </label>
-        </div>
-        <div class="control">
-            <label>显示经纬网: <input type="checkbox" id="showGrid" checked></label>
-        </div>
-        <div class="control">
-            <label>显示洋流系统: <input type="checkbox" id="showOceanCurrents"></label>
-        </div>
-        <div class="control">
-            <label>显示季风系统: <input type="checkbox" id="showMonsoon"></label>
-        </div>
-
-
-        <hr>
-
-        <h3>编辑</h3>
-        <div class="control">
-            <label>开启地图编辑: <input type="checkbox" id="editMode"></label>
-        </div>
-
-        <div id="editPanel">
-            <p class="hint">1. 在地图上按住拖动画一个红圈<br>2. 点下面两个按钮之一，把圈里的地变成大陆或海洋</p>
-
-            <div class="btn-grid">
-                <button id="btnRegionLand">🏔️ 隆起成大陆</button>
-                <button id="btnRegionSea">🌊 沉陷成海洋</button>
+        <div class="group group-primary">
+            <button id="generateBtn">生成新地图</button>
+            <div id="progressWrap">
+                <div id="progressBar"><div id="progressFill"></div></div>
+                <div id="progressText"></div>
             </div>
+            <button id="toggle3DBtn">进入 3D 视图</button>
+            <div class="control cloud-control" id="cloudToggleWrap">
+                <label>显示云层: <input type="checkbox" id="showClouds" checked></label>
+                <div class="mini-hint">3D 星球上的体积云（手绘模式会自动变淡）</div>
+            </div>
+            <button id="exportBtn" class="green">导出高清图片</button>
+        </div>
 
+        <div class="group">
+            <div class="group-title">世界生成</div>
             <div class="control">
-                <label>隆起幅度: <input type="range" id="regionStrength" min="0.35" max="1.1" step="0.01" value="0.82"> <span id="regionStrengthVal">0.82</span></label>
+                <label>板块数量: <input type="number" id="plateCount" value="6" min="2" max="20"></label>
             </div>
             <div class="control">
-                <label>地貌尺度: <input type="range" id="regionScale" min="0.55" max="1.8" step="0.01" value="1.00"> <span id="regionScaleVal">1.00</span></label>
+                <label>海洋占比: <input type="range" id="seaLevel" value="70" min="50" max="90"> <span id="seaLevelVal">70%</span></label>
             </div>
-            <p class="hint">隆起幅度 = 最高处占「陆地可用高度」的比例（0.82 ≈ 摸到雪线）。地貌尺度大于 1 得到更整块的大陆，小于 1 得到碎岛群。</p>
+        </div>
 
-            <button id="btnRegionClear" class="ghost">清除选区</button>
+        <div class="group">
+            <div class="group-title">视图与图层</div>
+            <div class="control">
+                <label>显示模式:
+                    <select id="viewMode">
+                        <option value="satellite" selected>卫星地图（群系 × 地形）</option>
+                        <option value="pure_terrain">纯地形（海拔色带）</option>
+                        <option value="contour">纯等高线</option>
+                        <option value="climate">气候热力图</option>
+                        <option value="biome">自然群系分布图</option>
+                        <option value="handdrawn">手绘古地图</option>
+                        <option value="named">手绘地名图（羊皮纸 × 手写地名）</option>
+                        <option value="lettered">手绘题名图（水墨 × 毛笔题字）</option>
+                    </select>
+                </label>
+                <div class="mini-hint" id="viewModeHint">地形、群系与光照合成的高信息量视图。</div>
+            </div>
+            <div class="control">
+                <label>地图投影:
+                    <select id="projection">
+                        <option value="equirect">等距圆柱（2:1 传统）</option>
+                        <option value="robinson" selected>罗宾逊（极点收拢）</option>
+                        <option value="mollweide">摩尔威德（等面积椭圆）</option>
+                    </select>
+                </label>
+            </div>
+            <div class="control">
+                <label>显示经纬网: <input type="checkbox" id="showGrid" checked></label>
+            </div>
+            <div class="control">
+                <label>显示洋流系统: <input type="checkbox" id="showOceanCurrents"></label>
+            </div>
+            <div class="control">
+                <label>显示季风系统: <input type="checkbox" id="showMonsoon"></label>
+            </div>
+        </div>
 
+        <div class="group">
+            <div class="group-title">编辑</div>
+            <div class="control">
+                <label>开启地图编辑: <input type="checkbox" id="editMode"></label>
+            </div>
+
+            <div id="editPanel">
+                <p class="hint">1. 在地图上按住拖动画一个红圈<br>2. 点下面两个按钮之一，把圈里的地变成大陆或海洋</p>
+
+                <div class="btn-grid">
+                    <button id="btnRegionLand">🏔️ 隆起成大陆</button>
+                    <button id="btnRegionSea">🌊 沉陷成海洋</button>
+                </div>
+
+                <div class="control">
+                    <label>隆起幅度: <input type="range" id="regionStrength" min="0.35" max="1.1" step="0.01" value="0.82"> <span id="regionStrengthVal">0.82</span></label>
+                </div>
+                <div class="control">
+                    <label>地貌尺度: <input type="range" id="regionScale" min="0.55" max="1.8" step="0.01" value="1.00"> <span id="regionScaleVal">1.00</span></label>
+                </div>
+                <p class="hint">隆起幅度 = 最高处占「陆地可用高度」的比例（0.82 ≈ 摸到雪线）。地貌尺度大于 1 得到更整块的大陆，小于 1 得到碎岛群。</p>
+
+                <button id="btnRegionClear" class="ghost">清除选区</button>
+
+                <div class="btn-row">
+                    <button id="undoBtn" class="ghost">撤销</button>
+                    <button id="redoBtn" class="ghost">重做</button>
+                </div>
+                <p class="hint">成形是同步的；海深与河流会自动重算。<kbd>Ctrl+Z</kbd> 撤销，<kbd>Ctrl+Shift+Z</kbd> 重做。</p>
+            </div>
+        </div>
+
+        <div class="group">
+            <div class="group-title">存档</div>
             <div class="btn-row">
-                <button id="undoBtn" class="ghost">撤销</button>
-                <button id="redoBtn" class="ghost">重做</button>
+                <button id="importDataBtn" class="warn">导入配置</button>
+                <button id="exportDataBtn" class="purple">导出配置</button>
             </div>
-            <p class="hint">成形是同步的；海深与河流会自动重算。<kbd>Ctrl+Z</kbd> 撤销，<kbd>Ctrl+Shift+Z</kbd> 重做。</p>
+            <input type="file" id="importFileInput" accept=".json" style="display: none">
         </div>
 
-        <div class="btn-row">
-            <button id="importDataBtn" class="warn">导入配置</button>
-            <button id="exportDataBtn" class="purple">导出配置</button>
-        </div>
-        <input type="file" id="importFileInput" accept=".json" style="display: none">
-
-        <div id="legendContainer">
+        <div id="legendContainer" class="group">
             <div class="legend-title">图例</div>
             <div id="legend" class="legend"></div>
         </div>
@@ -111,6 +125,34 @@
         <div id="canvas-stack">
             <canvas id="mapCanvas"></canvas>
             <canvas id="overlayCanvas"></canvas>
+        </div>
+
+        <!-- 3D 星球 HUD：图名 / 当前模式 / 操作提示（随 2D 显示模式换肤） -->
+        <div id="globeHud" aria-hidden="true">
+            <div class="hud-title-card">
+                <span class="hud-kicker">世界星图</span>
+                <strong id="hudWorldName">无名之境</strong>
+                <span class="hud-mode" id="hudModeName">卫星地图</span>
+            </div>
+            <div class="hud-badge">3D 星球</div>
+            <div class="hud-hint">拖拽旋转 · 滚轮缩放 · 极地可俯视</div>
+            <!-- 3D 罗盘：固定在右下角星空里，不与球体/地名抢画面 -->
+            <div class="hud-compass" aria-hidden="true">
+                <svg viewBox="0 0 100 112" role="img" aria-label="罗盘方位">
+                    <circle class="compass-line" cx="50" cy="58" r="40" opacity="0.75"></circle>
+                    <circle class="compass-line" cx="50" cy="58" r="32" opacity="0.35"></circle>
+                    <polygon class="compass-star" points="50,10 55,50 50,58 45,50" opacity="0.95"></polygon>
+                    <polygon class="compass-star" points="50,106 55,66 50,58 45,66" opacity="0.55"></polygon>
+                    <polygon class="compass-star" points="2,58 42,53 50,58 42,63" opacity="0.55"></polygon>
+                    <polygon class="compass-star" points="98,58 58,53 50,58 58,63" opacity="0.85"></polygon>
+                    <polygon class="compass-star" points="21,29 46,48 50,58 40,54" opacity="0.30"></polygon>
+                    <polygon class="compass-star" points="79,29 54,48 50,58 60,54" opacity="0.30"></polygon>
+                    <polygon class="compass-star" points="21,87 46,68 50,58 40,62" opacity="0.30"></polygon>
+                    <polygon class="compass-star" points="79,87 54,68 50,58 60,62" opacity="0.30"></polygon>
+                    <circle class="compass-dot" cx="50" cy="58" r="3"></circle>
+                    <text class="compass-label" x="50" y="26" text-anchor="middle">N</text>
+                </svg>
+            </div>
         </div>
     </div>
 
@@ -141,6 +183,8 @@
     <!-- 地形计算内核（主线程与 Worker 共用，必须先于 map-generator 加载） -->
     <script src="js/terrain.js"></script>
     <script src="js/map-generator.js"></script>
+    <!-- 地名引擎（手绘地名图 / 题名图的数据源，必须先于 renderer 加载） -->
+    <script src="js/toponymy.js"></script>
     <script src="js/renderer.js"></script>
     <!-- 编辑器算子层（terrain-ops 必须先于 editor 加载） -->
     <script src="js/terrain-ops.js"></script>
